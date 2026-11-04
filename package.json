@@ -4,7 +4,7 @@
   "private": true,
   "description": "AFTERHOURS 3D club — single-file Three.js site plus its presence relay",
   "scripts": {
-    "build": "./build.sh",
+    "build": "bash build.sh",
     "start": "node server/server.js",
     "serve": "python3 -m http.server 8080"
   },
