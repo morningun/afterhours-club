@@ -147,12 +147,38 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
+    if (m.t === 'set') { applyProfile(client, m); return; }
+
     if (m.t === 'bye') { drop(client, 'bye'); }
   });
 
   ws.on('close', () => drop(client, 'close'));
   ws.on('error', () => drop(client, 'error'));
 });
+
+/* nickname / outfit change; broadcast so every screen updates at once */
+function applyProfile(c, m) {
+  let changed = false;
+
+  if (typeof m.name === 'string') {
+    const want = m.name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);
+    if (want && want !== c.name && (!usedNames.has(want) || want === c.name)) {
+      usedNames.delete(c.name);
+      usedNames.add(want);
+      c.name = want;
+      changed = true;
+    }
+  }
+
+  if (Number.isInteger(m.color) && m.color >= 0 && m.color < COLORS && m.color !== c.color) {
+    c.color = m.color;
+    changed = true;
+  }
+
+  if (!changed) { send(c.ws, { t: 'you', id: c.id, name: c.name, color: c.color }); return; }
+  broadcast({ t: 'set', id: c.id, name: c.name, color: c.color }, c.id);
+  send(c.ws, { t: 'you', id: c.id, name: c.name, color: c.color });
+}
 
 function applyMove(c, m) {
   const nx = Number(m.x), nz = Number(m.z), ny = Number(m.yaw);
