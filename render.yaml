@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: afterhours-lobby
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: server
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.1

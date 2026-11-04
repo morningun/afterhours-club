@@ -1,0 +1,16 @@
+{
+  "name": "afterhours-lobby",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Presence relay for AFTERHOURS 3D club",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
