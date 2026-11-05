@@ -440,17 +440,35 @@ export function createCampAudio(opts = {}) {
         paintMute();
       });
     }
+    let closeTimer = 0;
+    const bumpMixer = () => {
+      if (!mixerEl) return;
+      clearTimeout(closeTimer);
+      if (mixerEl.classList.contains('open')) {
+        closeTimer = setTimeout(() => {
+          if (mixerEl) mixerEl.classList.remove('open');
+        }, 4000);
+      }
+    };
     if (chip && mixerEl) {
+      /* chip always visible (CSS); panel only when .open */
       chip.addEventListener('click', e => {
         e.stopPropagation();
         mixerEl.classList.toggle('open');
+        bumpMixer();
       });
+      if (mixerEl) {
+        mixerEl.addEventListener('pointerdown', bumpMixer);
+        mixerEl.addEventListener('input', bumpMixer);
+      }
     }
 
     return {
       setBulmongMode(on) {
         if (!mixerEl) return;
         mixerEl.classList.toggle('bulmong', !!on);
+        mixerEl.classList.remove('chrome');
+        /* panel stays closed; chip visibility driven by .chrome from camp.js */
         if (on) mixerEl.classList.remove('open');
       }
     };

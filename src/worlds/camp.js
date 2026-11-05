@@ -438,7 +438,7 @@ const npcs = [];
     if (!ch) continue;
     const body = new THREE.Color(sp.color).multiplyScalar(0.34);
     const rig = makeAvatar(body.getHex(), sp.color, false);
-    const tag = nameTag(sp.name, sp.color);
+    const tag = nameTag(sp.name, sp.color, isMobile ? { compact: true } : undefined);
     rig.group.add(tag);
     rig.group.position.copy(ch.seatPos);
     rig.group.rotation.y = ch.faceYaw;
@@ -476,7 +476,7 @@ const npcs = [];
     }
     scene.add(rig.group);
     ch.reserved = true;
-    npcs.push({ rig, chairIdx: sp.chair, kind: sp.kind, home: true, yieldT: 0 });
+    npcs.push({ rig, tag, chairIdx: sp.chair, kind: sp.kind, home: true, yieldT: 0 });
   }
 }
 
@@ -591,6 +591,13 @@ const audioUI = campAudio.attachUI({
 
 /* ---------------- sit / 불멍 ---------------- */
 const sitBtn = document.getElementById('sit');
+function setDockLabel(btn, text){
+  if (!btn) return;
+  const lbl = btn.querySelector('.lbl');
+  if (lbl) lbl.textContent = text;
+  else btn.textContent = text;
+}
+
 const bulmongBtn = document.getElementById('bulmong');
 const uiEl = document.getElementById('ui');
 const bulmongBanner = document.getElementById('bulmongBanner');
@@ -674,21 +681,21 @@ function setSit(on){
     if (idx < 0){
       showToast('의자 가까이 가서 눌러보세요');
       sitBtn.classList.remove('on');
-      sitBtn.textContent = 'SIT';
+      setDockLabel(sitBtn, 'SIT');
       return false;
     }
     playerState.pose = 'sit';
     playerState.sitChair = idx;
     playerState.sitProgress = 0;
     sitBtn.classList.add('on');
-    sitBtn.textContent = 'SITTING';
+    setDockLabel(sitBtn, 'SIT');
     if (typeof openReason === 'function') openReason();
     return true;
   }
   playerState.pose = 'idle';
   playerState.sitChair = -1;
   sitBtn.classList.remove('on');
-  sitBtn.textContent = 'SIT';
+  setDockLabel(sitBtn, 'SIT');
   roastProgress = 0;
   if (typeof roastBtn !== 'undefined') roastBtn.classList.remove('on');
   if (stickGroup) stickGroup.visible = false;
@@ -696,11 +703,38 @@ function setSit(on){
   return true;
 }
 
+const bulmongExitBtn = document.getElementById('bulmongExit');
+const mixerEl = document.getElementById('mixer');
+let bulmongChromeTimer = 0;
+
+function hideBulmongChrome(){
+  clearTimeout(bulmongChromeTimer);
+  bulmongChromeTimer = 0;
+  if (bulmongExitBtn) bulmongExitBtn.classList.remove('show');
+  if (mixerEl){
+    mixerEl.classList.remove('chrome');
+    mixerEl.classList.remove('open');
+  }
+}
+
+function showBulmongChrome(){
+  if (!bulmong) return;
+  if (bulmongExitBtn) bulmongExitBtn.classList.add('show');
+  if (mixerEl) mixerEl.classList.add('chrome');
+  clearTimeout(bulmongChromeTimer);
+  bulmongChromeTimer = setTimeout(hideBulmongChrome, 3000);
+}
+
+function bumpBulmongChrome(){
+  if (!bulmong) return;
+  if (bulmongExitBtn && bulmongExitBtn.classList.contains('show')) showBulmongChrome();
+}
+
 function setBulmong(on){
   bulmong = on;
   bulmongT = 0;
   bulmongBtn.classList.toggle('on', on);
-  bulmongBtn.textContent = on ? '불멍 ON' : '불멍';
+  setDockLabel(bulmongBtn, on ? 'ON' : '불멍');
   uiEl.classList.toggle('hide', on);
   bulmongBanner.classList.toggle('show', on);
   if (audioUI) audioUI.setBulmongMode(on);
@@ -708,6 +742,7 @@ function setBulmong(on){
     bulmongTimerEl.classList.toggle('show', on);
     if (on){ bulmongEnded = false; bulmongT = 0; }
   }
+  hideBulmongChrome(); /* leave or enter: chrome starts hidden */
   if (on && playerState.pose !== 'sit'){
     /* auto-sit if near a chair; otherwise just lock camera on fire from current spot */
     setSit(true);
@@ -716,16 +751,44 @@ function setBulmong(on){
 
 sitBtn.addEventListener('click', () => setSit(playerState.pose !== 'sit'));
 bulmongBtn.addEventListener('click', () => setBulmong(!bulmong));
+if (bulmongExitBtn){
+  bulmongExitBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    setBulmong(false);
+  });
+  bulmongExitBtn.addEventListener('pointerdown', e => e.stopPropagation());
+}
+if (mixerEl){
+  mixerEl.addEventListener('pointerdown', bumpBulmongChrome);
+  mixerEl.addEventListener('input', bumpBulmongChrome);
+}
+/* canvas tap in 불멍: show chrome only — never exit by itself */
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!bulmong) return;
+  if (e.button != null && e.button !== 0) return;
+  showBulmongChrome();
+});
 /* keydown bound after social init */
 
 
 /* ---------------- multiplayer ---------------- */
 const statusText = document.getElementById('statusText');
-const findSiteBtn = document.getElementById('findSite');
+const siteChip = document.getElementById('siteChip');
+const siteMenu = document.getElementById('siteMenu');
+const findSiteBtn = document.getElementById('findSiteBtn') || document.getElementById('findSite');
 let netFireLevel = 0.55;
+let siteMenuCanOpen = false;
+
+function setSiteLabel(site, n, offline){
+  const s = site || 1;
+  if (offline) statusText.textContent = s + '번 모닥불 · 혼자';
+  else statusText.textContent = s + '번 모닥불 · ' + Math.max(1, n || 1) + '명';
+}
 
 const campNet = createCampNet({
   scene,
+  getCamera: () => camera,
+  getPlayer: () => ({ x: player.position.x, z: player.position.z }),
   getState: () => ({
     x: player.position.x,
     z: player.position.z,
@@ -734,25 +797,25 @@ const campNet = createCampNet({
     on: playerState.speed > 0.15 ? 1 : 0
   }),
   onYou: (name, color) => {
-    /* nickname UI applyMe wired below once nick exists */
     if (campNet._applyYou) campNet._applyYou(name, color);
   },
   onStatus: (info) => {
     if (info.full) {
       statusText.textContent = '지금은 만석';
-      findSiteBtn.classList.remove('show');
+      siteMenuCanOpen = false;
+      siteMenu.classList.remove('open');
       showToast('지금은 만석');
       return;
     }
     if (info.fireLevel != null) netFireLevel = info.fireLevel;
     if (!info.online) {
-      statusText.textContent = (info.site || 1) + '번 모닥불 · 혼자 (재연결 중)';
-      findSiteBtn.classList.remove('show');
+      setSiteLabel(info.site, 1, true);
+      siteMenuCanOpen = false;
+      siteMenu.classList.remove('open');
       return;
     }
-    const n = Math.max(1, info.siteN || 1);
-    statusText.textContent = (info.site || 1) + '번 모닥불 · 지금 ' + n + '명이 불을 보고 있어요';
-    findSiteBtn.classList.add('show');
+    setSiteLabel(info.site, info.siteN, false);
+    siteMenuCanOpen = true;
   },
   onEvent: (ev) => {
     if (ev.t === 'full') showToast('지금은 만석');
@@ -762,8 +825,21 @@ const campNet = createCampNet({
   }
 });
 
-findSiteBtn.addEventListener('click', () => {
+siteChip.addEventListener('click', e => {
+  e.stopPropagation();
+  if (!siteMenuCanOpen) return;
+  siteMenu.classList.toggle('open');
+  siteChip.setAttribute('aria-expanded', siteMenu.classList.contains('open') ? 'true' : 'false');
+});
+findSiteBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  siteMenu.classList.remove('open');
   if (campNet.resite()) showToast('다른 모닥불을 찾는 중…');
+});
+document.addEventListener('pointerdown', e => {
+  if (!siteMenu.classList.contains('open')) return;
+  if (siteMenu.contains(e.target) || siteChip.contains(e.target)) return;
+  siteMenu.classList.remove('open');
 });
 
 /* ---------------- social: chat / emotes / reason / block ---------------- */
@@ -814,13 +890,45 @@ chatInput.addEventListener('keydown', e => {
   if (e.code === 'Escape'){ e.preventDefault(); closeChat(); }
 });
 
+const emoteWrap = document.getElementById('emoteWrap');
+const emoteToggle = document.getElementById('emoteToggle');
+const actionWrap = document.getElementById('actionWrap');
+const actionToggle = document.getElementById('actionToggle');
+function closeFlyouts(except){
+  if (except !== 'emote') emoteWrap && emoteWrap.classList.remove('open');
+  if (except !== 'action') actionWrap && actionWrap.classList.remove('open');
+}
+if (emoteToggle){
+  emoteToggle.addEventListener('click', e => {
+    e.stopPropagation();
+    const on = !emoteWrap.classList.contains('open');
+    closeFlyouts('emote');
+    emoteWrap.classList.toggle('open', on);
+  });
+}
+if (actionToggle){
+  actionToggle.addEventListener('click', e => {
+    e.stopPropagation();
+    const on = !actionWrap.classList.contains('open');
+    closeFlyouts('action');
+    actionWrap.classList.toggle('open', on);
+  });
+}
+document.addEventListener('pointerdown', e => {
+  if (emoteWrap && !emoteWrap.contains(e.target)) emoteWrap.classList.remove('open');
+  if (actionWrap && !actionWrap.contains(e.target)) actionWrap.classList.remove('open');
+});
 document.querySelectorAll('#emoteBar [data-emote]').forEach(btn => {
   btn.addEventListener('click', () => {
     const em = btn.getAttribute('data-emote');
     campNet.sendEmote(em);
     localEmote = em;
     localEmoteUntil = performance.now() + 2200;
+    if (emoteWrap) emoteWrap.classList.remove('open');
   });
+});
+document.querySelectorAll('#fireActions button').forEach(btn => {
+  btn.addEventListener('click', () => { if (actionWrap) actionWrap.classList.remove('open'); });
 });
 
 function openReason(){
@@ -900,6 +1008,9 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape'){
     if (reasonPanel.classList.contains('open')) reasonPanel.classList.remove('open');
     else if (peerMenu.classList.contains('open')) peerMenu.classList.remove('open');
+    else if (siteMenu.classList.contains('open')) siteMenu.classList.remove('open');
+    else if (emoteWrap && emoteWrap.classList.contains('open')) emoteWrap.classList.remove('open');
+    else if (actionWrap && actionWrap.classList.contains('open')) actionWrap.classList.remove('open');
     else if (wishOpen) closeWish();
     else if (bulmong) setBulmong(false);
     else if (playerState.pose === 'sit' || playerState.pose === 'roast') setSit(false);
@@ -1423,6 +1534,48 @@ function tick(now){
 
   campNet.update(dt);
   campNet.filterBubblesByRange(player.position.x, player.position.z, 8);
+  /* NPC nametag LOD + vertical offset (screen-space) */
+  {
+    const TAG_HIDE = 16, TAG_NEAR = 3.5, TAG_FAR = 12;
+    const buf = [];
+    const proj = new THREE.Vector3();
+    for (const n of npcs) {
+      if (!n.tag) continue;
+      const px = n.rig.group.position.x, pz = n.rig.group.position.z;
+      const dist = Math.hypot(px - player.position.x, pz - player.position.z);
+      if (dist > TAG_HIDE) { n.tag.visible = false; continue; }
+      n.tag.visible = true;
+      const tt = Math.min(1, Math.max(0, (TAG_FAR - dist) / (TAG_FAR - TAG_NEAR)));
+      const mul = 0.55 + 0.45 * tt;
+      const bx = n.tag.userData.baseScaleX || n.tag.scale.x;
+      const by = n.tag.userData.baseScaleY || n.tag.scale.y;
+      n.tag.userData.baseScaleX = bx; n.tag.userData.baseScaleY = by;
+      n.tag.scale.set(bx * mul, by * mul, 1);
+      const baseY = n.tag.userData.baseY || 2.42;
+      proj.set(px, n.rig.group.position.y + baseY, pz);
+      proj.project(camera);
+      if (proj.z > 1) { n.tag.visible = false; continue; }
+      buf.push({
+        tag: n.tag, baseY,
+        sx: (proj.x * 0.5 + 0.5) * innerWidth,
+        sy: (-proj.y * 0.5 + 0.5) * innerHeight,
+        oy: 0
+      });
+    }
+    buf.sort((a, b) => a.sy - b.sy || a.sx - b.sx);
+    const minDx = isMobile ? 72 : 96, minDy = isMobile ? 22 : 28;
+    for (let i = 0; i < buf.length; i++) {
+      let oy = 0;
+      for (let j = 0; j < i; j++) {
+        const a = buf[i], b = buf[j];
+        if (Math.abs(a.sx - b.sx) < minDx && Math.abs((a.sy - oy * 40) - (b.sy - b.oy * 40)) < minDy) {
+          oy = Math.max(oy, b.oy + 0.22);
+        }
+      }
+      buf[i].oy = oy;
+      buf[i].tag.position.y = buf[i].baseY + oy;
+    }
+  }
   if (selfBubble){
     selfBubble.position.set(player.position.x, player.position.y + 2.55, player.position.z);
     if (performance.now() > selfBubbleUntil){

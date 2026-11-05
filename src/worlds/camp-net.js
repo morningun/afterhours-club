@@ -34,12 +34,22 @@ function saveBlocked(set) {
  * @param {(info:{site:number,siteN:number,solo:boolean,online:boolean,full?:boolean,fireLevel?:number}) => void} [opts.onStatus]
  * @param {(msg:object) => void} [opts.onEvent]  chat/emote/wish/site/reason…
  */
+const IS_MOBILE = (navigator.maxTouchPoints > 0) || matchMedia('(pointer:coarse)').matches;
+const TAG_HIDE = 16;
+const TAG_NEAR = 3.5;
+const TAG_FAR = 12;
+const _tagProj = new THREE.Vector3();
+const _tagBuf = [];
+
 export function createCampNet(opts) {
   const scene = opts.scene;
   const getState = opts.getState;
+  const getCamera = opts.getCamera || (() => null);
+  const getPlayer = opts.getPlayer || (() => ({ x: 0, z: 0 }));
   const onYou = opts.onYou || (() => {});
   const onStatus = opts.onStatus || (() => {});
   const onEvent = opts.onEvent || (() => {});
+  const tagOpts = IS_MOBILE ? { compact: true } : undefined;
 
   const NET = {
     ws: null, id: null, name: '', color: 0, online: false,
@@ -73,7 +83,7 @@ export function createCampNet(opts) {
     const trim = peerColor(s.color || 0);
     const body = new THREE.Color(trim).multiplyScalar(0.34);
     const rig = makeAvatar(body.getHex(), trim, false);
-    const tag = nameTag(s.name || '캠퍼', trim);
+    const tag = nameTag(s.name || '캠퍼', trim, tagOpts);
     rig.group.add(tag);
     rig.group.position.set(s.x || 0, 0, s.z || 0);
     rig.group.rotation.y = s.yaw || 0;
@@ -107,7 +117,7 @@ export function createCampNet(opts) {
 
   function retagPeer(p, name, trim) {
     if (p.tag && p.tag.parent) p.tag.parent.remove(p.tag);
-    p.tag = nameTag(name, trim);
+    p.tag = nameTag(name, trim, tagOpts);
     p.rig.group.add(p.tag);
     p.name = name;
   }
@@ -117,7 +127,7 @@ export function createCampNet(opts) {
     if (p.reasonTag && p.reasonTag.parent) p.reasonTag.parent.remove(p.reasonTag);
     p.reasonTag = null;
     if (!reason || p.hidden) return;
-    const sprite = nameTag(reason, 0xffc98a);
+    const sprite = nameTag(reason, 0xffc98a, tagOpts);
     sprite.position.y = 2.72;
     sprite.scale.multiplyScalar(0.72);
     p.rig.group.add(sprite);
@@ -411,10 +421,61 @@ export function createCampNet(opts) {
     }
   }
 
+  function layoutNameTags() {
+    const cam = getCamera();
+    if (!cam) return;
+    const me = getPlayer();
+    _tagBuf.length = 0;
+    for (const p of peers.values()) {
+      if (p.hidden || !p.tag) continue;
+      const dx = p.x - me.x, dz = p.z - me.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > TAG_HIDE) {
+        p.tag.visible = false;
+        if (p.reasonTag) p.reasonTag.visible = false;
+        continue;
+      }
+      p.tag.visible = true;
+      if (p.reasonTag) p.reasonTag.visible = dist < TAG_HIDE * 0.85;
+      const t = Math.min(1, Math.max(0, (TAG_FAR - dist) / (TAG_FAR - TAG_NEAR)));
+      const mul = 0.55 + 0.45 * t;
+      const bx = p.tag.userData.baseScaleX || p.tag.scale.x;
+      const by = p.tag.userData.baseScaleY || p.tag.scale.y;
+      p.tag.userData.baseScaleX = bx;
+      p.tag.userData.baseScaleY = by;
+      p.tag.scale.set(bx * mul, by * mul, 1);
+      const baseY = p.tag.userData.baseY || 2.42;
+      _tagProj.set(p.x, (p.rig.group.position.y || 0) + baseY, p.z);
+      _tagProj.project(cam);
+      if (_tagProj.z > 1) { p.tag.visible = false; continue; }
+      const sx = (_tagProj.x * 0.5 + 0.5) * innerWidth;
+      const sy = (-_tagProj.y * 0.5 + 0.5) * innerHeight;
+      _tagBuf.push({ p, sx, sy, baseY, oy: 0 });
+    }
+    _tagBuf.sort((a, b) => a.sy - b.sy || a.sx - b.sx);
+    const minDx = IS_MOBILE ? 72 : 96;
+    const minDy = IS_MOBILE ? 22 : 28;
+    for (let i = 0; i < _tagBuf.length; i++) {
+      let oy = 0;
+      for (let j = 0; j < i; j++) {
+        const a = _tagBuf[i], b = _tagBuf[j];
+        if (Math.abs(a.sx - b.sx) < minDx && Math.abs((a.sy - oy * 40) - (b.sy - b.oy * 40)) < minDy) {
+          oy = Math.max(oy, b.oy + 0.22);
+        }
+      }
+      _tagBuf[i].oy = oy;
+      _tagBuf[i].p.tag.position.y = _tagBuf[i].baseY + oy;
+      if (_tagBuf[i].p.reasonTag) {
+        _tagBuf[i].p.reasonTag.position.y = 2.72 + oy;
+      }
+    }
+  }
+
   function update(dt) {
     if (!NET.ws && !NET.full && performance.now() >= NET.retryAt) connectNet();
     pumpNet();
     updatePeers(dt);
+    layoutNameTags();
   }
 
   function send(obj) {

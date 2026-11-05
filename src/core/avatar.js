@@ -116,13 +116,16 @@ export function peerColor(index) {
   return NET_COLORS[((index % NET_COLORS.length) + NET_COLORS.length) % NET_COLORS.length];
 }
 
-export function nameTag(text, hex) {
+export function nameTag(text, hex, opts) {
+  const compact = !!(opts && opts.compact);
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  const font = '600 34px "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+  const fontPx = compact ? 26 : 34;
+  const font = '600 ' + fontPx + 'px "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
   const measure = document.createElement('canvas').getContext('2d');
   measure.font = font;
-  const wCss = Math.ceil(measure.measureText(text).width) + 34;
-  const hCss = 56;
+  const padX = compact ? 22 : 34;
+  const wCss = Math.ceil(measure.measureText(text).width) + padX;
+  const hCss = compact ? 40 : 56;
 
   const c = document.createElement('canvas');
   c.width = Math.ceil(wCss * dpr);
@@ -133,17 +136,18 @@ export function nameTag(text, hex) {
   const rgb = new THREE.Color(hex);
   const css = 'rgb(' + Math.round(rgb.r * 255) + ',' + Math.round(rgb.g * 255) + ',' + Math.round(rgb.b * 255) + ')';
 
-  const r = 26;
+  const r = compact ? 18 : 26;
+  const inset = compact ? 3 : 4;
   ctx.beginPath();
-  ctx.moveTo(r, 4);
-  ctx.arcTo(wCss - 4, 4, wCss - 4, hCss - 4, r);
-  ctx.arcTo(wCss - 4, hCss - 4, 4, hCss - 4, r);
-  ctx.arcTo(4, hCss - 4, 4, 4, r);
-  ctx.arcTo(4, 4, wCss - 4, 4, r);
+  ctx.moveTo(r, inset);
+  ctx.arcTo(wCss - inset, inset, wCss - inset, hCss - inset, r);
+  ctx.arcTo(wCss - inset, hCss - inset, inset, hCss - inset, r);
+  ctx.arcTo(inset, hCss - inset, inset, inset, r);
+  ctx.arcTo(inset, inset, wCss - inset, inset, r);
   ctx.closePath();
   ctx.fillStyle = 'rgba(6,4,12,0.74)';
   ctx.fill();
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = compact ? 2 : 2.5;
   ctx.strokeStyle = css;
   ctx.stroke();
 
@@ -151,7 +155,7 @@ export function nameTag(text, hex) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = css;
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur = compact ? 8 : 12;
   ctx.fillStyle = '#ffffff';
   ctx.fillText(text, wCss / 2, hCss / 2 + 1);
 
@@ -162,10 +166,13 @@ export function nameTag(text, hex) {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: tex, transparent: true, depthWrite: false, depthTest: false, fog: false
   }));
-  const hWorld = 0.30;
+  const hWorld = compact ? 0.24 : 0.30;
   sprite.scale.set(hWorld * (wCss / hCss), hWorld, 1);
   sprite.position.set(0, 2.42, 0);
   sprite.renderOrder = 20;
+  sprite.userData.baseScaleX = sprite.scale.x;
+  sprite.userData.baseScaleY = sprite.scale.y;
+  sprite.userData.baseY = 2.42;
   return sprite;
 }
 

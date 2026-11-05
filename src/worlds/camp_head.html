@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>EMBERS — Campfire</title>
 <style>
+  :root{
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --chip: rgba(12,14,18,.55);
+    --chip-b: rgba(255,255,255,.16);
+    --accent: rgba(255,154,74,.55);
+  }
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%;background:#05070c;overflow:hidden;color:#fff;
     font-family:"Helvetica Neue",Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
@@ -12,182 +21,254 @@
   canvas{display:block}
   #app{position:fixed;inset:0;opacity:0;transition:opacity 1.6s ease}
   #app.ready{opacity:1}
-  #ui{position:fixed;inset:0;pointer-events:none;touch-action:none;transition:opacity .7s ease}
+  #ui{position:fixed;inset:0;pointer-events:none;touch-action:none;transition:opacity .7s ease;
+    padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l)}
   #ui.hide{opacity:0;pointer-events:none}
-  .brand{position:absolute;top:22px;left:24px;font-size:11px;font-weight:700;letter-spacing:.42em;opacity:.9}
-  .brand em{display:block;font-style:normal;margin-top:7px;font-size:9px;letter-spacing:.18em;font-weight:400;color:#ff9a4a}
-  #status{position:absolute;top:62px;left:24px;display:flex;align-items:center;gap:8px;
-    padding:8px 14px;border-radius:999px;border:1px solid rgba(255,154,74,.28);
-    background:rgba(255,120,40,.07);font-size:11px;letter-spacing:.06em;color:#ffe0c2;
-    backdrop-filter:blur(10px)}
-  #status i{width:7px;height:7px;border-radius:50%;background:#ff9a4a;box-shadow:0 0 10px #ff9a4a}
-  #me{position:absolute;top:16px;right:16px;pointer-events:auto;display:flex;align-items:center;gap:8px;
-    padding:9px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.18);
-    background:rgba(255,255,255,.05);color:#fff;font-size:11px;letter-spacing:.1em;cursor:pointer;
-    transition:.22s;backdrop-filter:blur(10px);max-width:44vw}
-  #me:hover{background:rgba(255,154,74,.16);border-color:rgba(255,154,74,.55)}
-  #meDot{width:9px;height:9px;border-radius:50%;background:#ff9a4a;box-shadow:0 0 10px currentColor;flex:0 0 auto}
-  #meName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #panel{position:absolute;top:68px;right:16px;width:252px;pointer-events:auto;
-    padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.16);
-    background:rgba(8,10,14,.88);backdrop-filter:blur(18px);
-    box-shadow:0 18px 50px rgba(0,0,0,.6);
-    opacity:0;transform:translateY(-8px) scale(.98);pointer-events:none;transition:.2s ease}
+  #ui.hide #siteChip, #ui.hide #siteMenu{opacity:0;pointer-events:none}
+
+  /* shared chip look — min 44px touch */
+  .chip, .dockBtn, #mixerChip, #siteChip, #me{
+    min-width:44px;min-height:44px;pointer-events:auto;cursor:pointer;
+    border-radius:999px;border:1px solid var(--chip-b);
+    background:var(--chip);color:#f0e6d8;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    font:700 11px/1.1 system-ui,sans-serif;letter-spacing:.04em;
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:10px 12px;transition:background .18s,border-color .18s,opacity .3s}
+  .chip:active, .dockBtn:active, #mixerChip:active{background:rgba(255,154,74,.2)}
+  .dockBtn.on, #sit.on{border-color:rgba(255,180,80,.75);background:rgba(255,120,40,.28);color:#ffe4c4}
+  #bulmong.on{border-color:rgba(180,210,255,.7);background:rgba(60,90,160,.35);color:#fff}
+  .ico{font-size:16px;line-height:1}
+
+  /* TOP-LEFT: site chip + menu (outside center) */
+  #siteChip{position:absolute;top:calc(10px + var(--safe-t));left:calc(10px + var(--safe-l));
+    z-index:20;max-width:42vw;padding:10px 14px}
+  #siteChip i{width:8px;height:8px;border-radius:50%;background:#ff9a4a;box-shadow:0 0 8px #ff9a4a;flex:0 0 auto}
+  #siteChip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:34vw}
+  #siteMenu{position:absolute;top:calc(58px + var(--safe-t));left:calc(10px + var(--safe-l));
+    z-index:21;display:none;flex-direction:column;gap:6px;padding:8px;
+    border-radius:14px;border:1px solid var(--chip-b);background:rgba(8,10,14,.88);
+    backdrop-filter:blur(10px);pointer-events:auto;min-width:160px}
+  #siteMenu.open{display:flex}
+  #siteMenu button{min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid var(--chip-b);
+    background:rgba(255,255,255,.06);color:#ffe8d0;font:600 12px/1.2 system-ui,sans-serif;
+    cursor:pointer;text-align:left;pointer-events:auto}
+  #findSite{display:none !important} /* legacy hidden; menu uses #findSiteBtn */
+
+  /* TOP-RIGHT: me / panel */
+  #me{position:absolute;top:calc(10px + var(--safe-t));right:calc(10px + var(--safe-r));
+    z-index:20;max-width:36vw;padding:8px 12px}
+  #meDot{width:8px;height:8px;border-radius:50%;background:#ff9a4a;box-shadow:0 0 8px currentColor;flex:0 0 auto}
+  #meName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+  #panel{position:absolute;top:calc(58px + var(--safe-t));right:calc(10px + var(--safe-r));
+    width:min(252px,70vw);pointer-events:auto;z-index:22;
+    padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.14);
+    background:rgba(8,10,14,.9);backdrop-filter:blur(12px);
+    opacity:0;transform:translateY(-6px);pointer-events:none;transition:.2s ease}
   #panel.open{opacity:1;transform:none;pointer-events:auto}
-  #panel h4{font-size:9px;letter-spacing:.28em;font-weight:700;color:rgba(255,255,255,.55);margin-bottom:8px}
+  #panel h4{font-size:9px;letter-spacing:.24em;font-weight:700;color:rgba(255,255,255,.5);margin-bottom:8px}
   #nameInput{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
-    background:rgba(255,255,255,.06);color:#fff;font-size:13px;font-family:inherit;outline:none}
-  #nameInput:focus{border-color:rgba(255,154,74,.7);box-shadow:0 0 0 3px rgba(255,154,74,.12)}
-  #swatches{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 16px}
-  #swatches button{width:26px;height:26px;border-radius:50%;border:2px solid transparent;
-    cursor:pointer;padding:0;transition:.18s;outline:none}
-  #swatches button:hover{transform:scale(1.12)}
-  #swatches button.on{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.25)}
-  #apply{width:100%;padding:11px;border-radius:10px;border:1px solid rgba(255,154,74,.5);
-    background:rgba(255,154,74,.14);color:#ffd7b0;font-size:11px;font-weight:700;letter-spacing:.2em;
-    cursor:pointer;transition:.2s;font-family:inherit}
-  #apply:hover{background:rgba(255,154,74,.26)}
-  #panelMsg{font-size:10px;color:rgba(255,255,255,.5);margin-top:9px;min-height:12px;letter-spacing:.04em}
-  #panelMsg.err{color:#ff9ab8}
-  #hint{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);font-size:11px;letter-spacing:.12em;
-    color:rgba(255,255,255,.5);text-align:center;white-space:nowrap;transition:opacity 1.4s}
+    background:rgba(255,255,255,.06);color:#fff;font-size:13px;font-family:inherit;outline:none;min-height:44px}
+  #swatches{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 14px}
+  #swatches button{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+  #swatches button.on{border-color:#fff}
+  #apply{width:100%;min-height:44px;padding:11px;border-radius:10px;border:1px solid var(--accent);
+    background:rgba(255,154,74,.14);color:#ffd7b0;font-size:11px;font-weight:700;letter-spacing:.16em;
+    cursor:pointer;font-family:inherit}
+  #panelMsg{font-size:10px;color:rgba(255,255,255,.5);margin-top:8px;min-height:12px}
+
+  /* desktop hint — bottom edge only, hidden on touch */
+  #hint{position:absolute;left:50%;bottom:calc(12px + var(--safe-b));transform:translateX(-50%);
+    font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.4);text-align:center;
+    white-space:nowrap;transition:opacity 1.4s;pointer-events:none;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
   #hint.hide{opacity:0}
-  #sit{position:absolute;right:16px;bottom:34px;pointer-events:auto;padding:14px 22px;border-radius:999px;
-    border:1px solid rgba(255,154,74,.45);background:rgba(255,154,74,.1);color:#ffc98a;
-    font-size:11px;font-weight:700;letter-spacing:.24em;cursor:pointer;transition:.22s;backdrop-filter:blur(10px)}
-  #sit:hover{background:rgba(255,154,74,.22)}
-  #sit.on{background:rgba(255,120,40,.28);border-color:rgba(255,180,80,.8);color:#ffe4c4;
-    box-shadow:0 0 26px rgba(255,120,40,.45)}
-  #bulmong{position:absolute;right:16px;bottom:98px;pointer-events:auto;padding:12px 18px;border-radius:999px;
-    border:1px solid rgba(180,210,255,.35);background:rgba(40,60,100,.18);color:#cfe0ff;
-    font-size:10px;font-weight:700;letter-spacing:.2em;cursor:pointer;transition:.22s;backdrop-filter:blur(10px)}
-  #bulmong:hover{background:rgba(80,120,200,.22)}
-  #bulmong.on{background:rgba(60,90,160,.35);border-color:rgba(180,210,255,.7);color:#fff;
-    box-shadow:0 0 22px rgba(100,140,220,.4)}
-  #stick{position:absolute;left:24px;bottom:34px;width:118px;height:118px;border-radius:50%;
-    border:1px solid rgba(255,255,255,.16);pointer-events:auto;display:none;touch-action:none;
+  @media (pointer:coarse){#hint{display:none}}
+
+  /* BOTTOM-LEFT: joystick — stays in corner; size capped to ~left gutter on narrow phones */
+  #stick{position:absolute;left:calc(8px + var(--safe-l));bottom:calc(10px + var(--safe-b));
+    width:min(112px, calc(20vw - 4px));height:min(112px, calc(20vw - 4px));
+    min-width:64px;min-height:64px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.14);pointer-events:auto;display:none;touch-action:none;z-index:15;
     background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.07),rgba(255,255,255,.015))}
-  #knob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;
-    background:rgba(255,220,180,.55);box-shadow:0 0 24px rgba(255,120,40,.55)}
-  @media (pointer:coarse){#stick{display:block}#hint{display:none}}
-  #bulmongBanner{position:absolute;left:50%;top:28px;transform:translateX(-50%);
-    font-size:10px;letter-spacing:.32em;color:rgba(255,220,180,.55);opacity:0;transition:opacity 1s;
-    pointer-events:none}
-  #bulmongBanner.show{opacity:1}
+  #knob{position:absolute;left:50%;top:50%;width:42%;height:42%;margin:-21% 0 0 -21%;border-radius:50%;
+    background:rgba(255,220,180,.55);box-shadow:0 0 18px rgba(255,120,40,.45)}
+  @media (pointer:coarse){#stick{display:block}}
+  @media (min-width:700px){
+    #stick{width:112px;height:112px;min-width:112px;min-height:112px}
+  }
 
-  #bulmongTimer{position:absolute;left:50%;top:52px;transform:translateX(-50%);
-    font-size:10px;letter-spacing:.28em;color:rgba(255,220,180,.45);opacity:0;transition:opacity .8s;
-    pointer-events:none}
-  #bulmongTimer.show{opacity:1}
-  #findSite{position:absolute;top:104px;left:24px;pointer-events:auto;padding:8px 14px;border-radius:999px;
-    border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#e8dcc8;
-    font-size:10px;font-weight:700;letter-spacing:.12em;cursor:pointer;backdrop-filter:blur(10px);display:none}
-  #findSite:hover{background:rgba(255,154,74,.16);border-color:rgba(255,154,74,.5)}
-  #findSite.show{display:block}
-
-  #audioUnlock{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;
-    pointer-events:auto;padding:16px 28px;border-radius:999px;
-    border:1px solid rgba(255,200,120,.55);background:rgba(20,14,10,.88);
-    color:#ffe2c4;font:700 13px/1 system-ui,sans-serif;letter-spacing:.18em;
-    cursor:pointer;backdrop-filter:blur(12px);box-shadow:0 12px 40px rgba(0,0,0,.55);
-    transition:opacity .35s,transform .35s}
-  #audioUnlock:hover{background:rgba(255,154,74,.22)}
-  #audioUnlock[hidden]{display:none !important}
-  #mixer{position:fixed;left:16px;bottom:160px;z-index:35;pointer-events:auto;
-    width:210px;transition:opacity .35s}
-  @media (pointer:coarse){#mixer{bottom:170px}}
-  #mixerChip{display:none;width:100%;padding:10px 14px;border-radius:999px;
-    border:1px solid rgba(255,255,255,.2);background:rgba(10,12,16,.78);color:#e8dcc8;
-    font:700 10px/1 system-ui,sans-serif;letter-spacing:.2em;cursor:pointer;backdrop-filter:blur(10px)}
-  #mixerPanel{padding:12px 14px 14px;border-radius:16px;border:1px solid rgba(255,255,255,.14);
-    background:rgba(8,10,14,.86);backdrop-filter:blur(14px);box-shadow:0 14px 36px rgba(0,0,0,.5)}
-  #mixer.bulmong{bottom:24px;left:16px;width:auto;min-width:120px}
-  #mixer.bulmong #mixerChip{display:block}
-  #mixer.bulmong:not(.open) #mixerPanel{display:none}
-  #mixer.bulmong.open{width:210px}
-  #mixer.bulmong.open #mixerPanel{display:block;margin-top:8px}
+  /* mixer sound chip — left edge, above joystick clearance */
+  #mixer{position:fixed;left:calc(10px + var(--safe-l));
+    bottom:calc(10px + var(--safe-b) + min(112px, 20vw - 4px) + 12px);
+    z-index:35;pointer-events:auto;width:auto}
+  @media (pointer:fine){
+    #mixer{bottom:calc(24px + var(--safe-b))} /* no stick on desktop */
+  }
+  #mixerChip{width:44px;height:44px;padding:0;border-radius:50%;font-size:18px}
+  #mixerPanel{display:none;position:absolute;left:0;bottom:52px;width:200px;padding:12px 14px 14px;
+    border-radius:16px;border:1px solid rgba(255,255,255,.14);
+    background:rgba(8,10,14,.9);backdrop-filter:blur(12px);box-shadow:0 12px 28px rgba(0,0,0,.45)}
+  #mixer.open #mixerPanel{display:block}
+  #mixer.bulmong{opacity:0;pointer-events:none;transition:opacity .35s ease}
+  #mixer.bulmong.chrome{opacity:1;pointer-events:auto}
+  /* 불멍: stick gone — pin mixer to bottom-left edge */
+  #mixer.bulmong{bottom:calc(12px + var(--safe-b))}
   .mixRow{display:flex;align-items:center;gap:10px;margin:8px 0}
-  .mixRow label{flex:0 0 36px;font-size:10px;letter-spacing:.12em;color:rgba(255,230,200,.7)}
+  .mixRow label{flex:0 0 36px;font-size:10px;letter-spacing:.1em;color:rgba(255,230,200,.7)}
   .mixRow input[type=range]{flex:1;accent-color:#ff9a4a;height:4px}
-  #mixerMute{width:100%;margin-top:8px;padding:9px;border-radius:10px;
+  #mixerMute{width:100%;margin-top:8px;min-height:40px;padding:9px;border-radius:10px;
     border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#ddd;
-    font:700 10px/1 system-ui,sans-serif;letter-spacing:.16em;cursor:pointer}
+    font:700 10px/1 system-ui,sans-serif;letter-spacing:.12em;cursor:pointer}
   #mixerMute.on{border-color:rgba(255,120,120,.5);color:#ffc0c0;background:rgba(255,80,80,.12)}
 
-  #emoteBar{position:absolute;right:16px;bottom:162px;pointer-events:auto;display:flex;flex-direction:column;gap:8px}
-  #emoteBar button{padding:10px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.2);
-    background:rgba(10,12,16,.72);color:#e8dcc8;font:700 10px/1 system-ui,sans-serif;letter-spacing:.14em;
+  /* BOTTOM-RIGHT dock: only 말풍선 / 이모트 / 불멍 / SIT — 2x2 so stack stays in bottom 20% */
+  #rightDock{position:absolute;right:calc(10px + var(--safe-r));bottom:calc(10px + var(--safe-b));
+    z-index:18;pointer-events:none;display:grid;grid-template-columns:repeat(2,auto);
+    grid-auto-rows:minmax(44px,auto);gap:6px;justify-items:end;align-items:end;
+    direction:rtl} /* chat/emote toward outer edge visually */
+  #rightDock > *{pointer-events:auto;direction:ltr}
+  #emoteWrap{grid-column:1;grid-row:1}
+  #chatBtn{grid-column:2;grid-row:1}
+  #bulmong{grid-column:1;grid-row:2}
+  #sit{grid-column:2;grid-row:2}
+  .dockBtn{padding:10px 12px}
+  .dockBtn .lbl{font-size:10px;letter-spacing:.06em}
+
+  #emoteWrap{position:relative;display:flex;flex-direction:column;align-items:flex-end}
+  #emoteBar{display:none;position:absolute;bottom:0;right:calc(100% + 8px);flex-direction:row;gap:6px;pointer-events:auto}
+  #emoteWrap.open #emoteBar{display:flex}
+
+  /* 행동: bottom-center single chip, expands upward — clear of joystick (left) and right dock */
+  #actionWrap{position:absolute;left:50%;bottom:calc(10px + var(--safe-b));transform:translateX(-50%);
+    z-index:18;pointer-events:auto;display:flex;flex-direction:column;align-items:center}
+  #fireActions{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+    flex-direction:row;gap:6px;pointer-events:auto}
+  #actionWrap.open #fireActions{display:flex}
+  #emoteBar button, #fireActions button{
+    min-width:44px;min-height:44px;padding:10px 12px;border-radius:999px;
+    border:1px solid var(--chip-b);background:var(--chip);color:#f0e6d8;
+    backdrop-filter:blur(8px);font:700 11px/1 system-ui,sans-serif;cursor:pointer;
+    white-space:nowrap}
+
+  /* brand — top edge, compact; avoid center mass */
+  .brand{position:absolute;top:calc(56px + var(--safe-t));left:calc(12px + var(--safe-l));
+    font-size:9px;font-weight:700;letter-spacing:.36em;opacity:.55;pointer-events:none}
+  .brand em{display:block;font-style:normal;margin-top:4px;font-size:8px;letter-spacing:.14em;font-weight:400;color:#ff9a4a}
+  @media (max-height:500px){.brand{display:none}}
+
+  #bulmongBanner{position:fixed;left:50%;top:calc(8px + var(--safe-t));transform:translateX(-50%);
+    font-size:9px;letter-spacing:.14em;color:rgba(255,220,180,.55);opacity:0;transition:opacity 1s;
+    pointer-events:none;max-width:86vw;text-align:center;z-index:34}
+  #bulmongBanner.show{opacity:1}
+  #bulmongBanner .hintTouch{display:none}
+  @media (pointer:coarse){
+    #bulmongBanner .hintDesk{display:none}
+    #bulmongBanner .hintTouch{display:inline}
+  }
+  #bulmongTimer{position:fixed;left:50%;top:calc(28px + var(--safe-t));transform:translateX(-50%);
+    font-size:9px;letter-spacing:.24em;color:rgba(255,220,180,.4);opacity:0;transition:opacity .8s;
+    pointer-events:none;z-index:34}
+  #bulmongTimer.show{opacity:1}
+
+  /* 불멍 exit chip — bottom-right edge; fades with mixer chrome */
+  #bulmongExit{
+    position:fixed;right:calc(10px + var(--safe-r));bottom:calc(12px + var(--safe-b));
+    z-index:36;min-width:44px;min-height:44px;padding:10px 16px;
+    border-radius:999px;border:1px solid var(--chip-b);background:var(--chip);color:#ffe8d0;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    font:700 12px/1 system-ui,sans-serif;letter-spacing:.08em;cursor:pointer;
+    opacity:0;pointer-events:none;transition:opacity .35s ease}
+  #bulmongExit.show{opacity:1;pointer-events:auto}
+  #bulmongExit:active{background:rgba(255,154,74,.22)}
+
+  #audioUnlock{position:fixed;left:50%;top:auto;bottom:calc(64px + var(--safe-b));transform:translateX(-50%);z-index:40;
+    pointer-events:auto;padding:14px 22px;border-radius:999px;min-height:44px;
+    border:1px solid rgba(255,200,120,.55);background:rgba(20,14,10,.88);
+    color:#ffe2c4;font:700 12px/1 system-ui,sans-serif;letter-spacing:.14em;
     cursor:pointer;backdrop-filter:blur(10px)}
-  #emoteBar button:hover{border-color:rgba(255,154,74,.55);background:rgba(255,154,74,.14)}
-  #chatBtn{position:absolute;right:16px;bottom:300px;pointer-events:auto;display:none;padding:10px 14px;border-radius:999px;
-    border:1px solid rgba(255,255,255,.2);background:rgba(10,12,16,.72);color:#e8dcc8;
-    font:700 10px/1 system-ui,sans-serif;letter-spacing:.14em;cursor:pointer}
-  @media (pointer:coarse){#chatBtn{display:block}}
-  #chatBox{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:45;pointer-events:auto;
-    display:none;gap:8px;align-items:center;padding:10px 12px;border-radius:14px;
-    background:rgba(8,10,14,.92);border:1px solid rgba(255,200,140,.35);backdrop-filter:blur(12px)}
-  #chatBox.open{display:flex}
-  #chatInput{width:min(70vw,340px);padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
-    background:rgba(255,255,255,.06);color:#fff;font:500 14px/1.2 system-ui,sans-serif;outline:none}
+  #audioUnlock[hidden]{display:none !important}
+
+  #chatBox,#wishBox{position:fixed;left:50%;bottom:calc(18% + var(--safe-b));transform:translateX(-50%);z-index:45;
+    pointer-events:auto;display:none;gap:8px;align-items:center;padding:10px 12px;border-radius:14px;
+    background:rgba(8,10,14,.92);border:1px solid rgba(255,200,140,.35);backdrop-filter:blur(10px)}
+  #chatBox.open,#wishBox.open{display:flex}
+  #chatInput,#wishInput{width:min(70vw,320px);min-height:44px;padding:10px 12px;border-radius:10px;
+    border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;
+    font:500 14px/1.2 system-ui,sans-serif;outline:none}
   #reasonPanel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:46;pointer-events:auto;
-    display:none;flex-direction:column;gap:8px;padding:18px;border-radius:16px;min-width:260px;
-    background:rgba(8,10,14,.94);border:1px solid rgba(255,200,140,.4);backdrop-filter:blur(14px)}
+    display:none;flex-direction:column;gap:8px;padding:16px;border-radius:16px;min-width:min(260px,86vw);
+    background:rgba(8,10,14,.94);border:1px solid rgba(255,200,140,.4);backdrop-filter:blur(12px)}
   #reasonPanel.open{display:flex}
-  #reasonPanel h4{font:700 10px/1 system-ui,sans-serif;letter-spacing:.24em;color:rgba(255,230,200,.6);margin-bottom:4px}
-  #reasonPanel button{padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.18);
+  #reasonPanel h4{font:700 10px/1 system-ui,sans-serif;letter-spacing:.2em;color:rgba(255,230,200,.6)}
+  #reasonPanel button{min-height:44px;padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.18);
     background:rgba(255,255,255,.06);color:#ffe8d0;font:600 13px/1.2 system-ui,sans-serif;cursor:pointer;text-align:left}
-  #reasonPanel button:hover{background:rgba(255,154,74,.18);border-color:rgba(255,154,74,.5)}
   #peerMenu{position:fixed;z-index:47;display:none;flex-direction:column;gap:6px;padding:10px;border-radius:12px;
     background:rgba(8,10,14,.94);border:1px solid rgba(255,255,255,.2);pointer-events:auto}
   #peerMenu.open{display:flex}
-  #peerMenu button{padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);
+  #peerMenu button{min-height:40px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);
     background:rgba(255,255,255,.06);color:#eee;font:600 12px/1 system-ui,sans-serif;cursor:pointer}
 
-  #fireActions{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);pointer-events:auto;
-    display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-  #fireActions button{padding:10px 14px;border-radius:999px;border:1px solid rgba(255,154,74,.4);
-    background:rgba(255,120,40,.12);color:#ffd7b0;font:700 10px/1 system-ui,sans-serif;letter-spacing:.14em;
-    cursor:pointer;backdrop-filter:blur(10px)}
-  #fireActions button:hover{background:rgba(255,154,74,.22)}
-  #wishBox{position:fixed;left:50%;bottom:160px;transform:translateX(-50%);z-index:45;pointer-events:auto;
-    display:none;gap:8px;align-items:center;padding:10px 12px;border-radius:14px;
-    background:rgba(8,10,14,.92);border:1px solid rgba(255,200,140,.35)}
-  #wishBox.open{display:flex}
-  #wishInput{width:min(70vw,300px);padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
-    background:rgba(255,255,255,.06);color:#fff;font:500 14px/1.2 system-ui,sans-serif;outline:none}
+  /* landscape compact */
+  @media (orientation:landscape) and (max-height:480px){
+    #rightDock{display:flex;flex-direction:row-reverse;flex-wrap:wrap;max-width:52vw;
+      bottom:calc(8px + var(--safe-b));direction:ltr;gap:6px}
+    #emoteWrap,#chatBtn,#bulmong,#sit{grid-column:auto;grid-row:auto}
+    #stick{width:68px;height:68px;min-width:68px;min-height:68px}
+    #mixer{bottom:calc(8px + var(--safe-b) + 80px)}
+    #siteChip{max-width:30vw}
+    #emoteBar{bottom:auto;top:0}
+    #actionWrap{bottom:calc(8px + var(--safe-b))}
+    #fireActions{flex-direction:row}
+  }
 </style>
 </head>
 <body>
 <div id="app"></div>
 <div id="ui">
-  <div class="brand">EMBERS<em>PRE-DAWN · FOREST CAMP</em></div>
-  <div id="status"><i></i><span id="statusText">모닥불 연결 중…</span></div>
-  <button id="findSite" type="button">다른 모닥불 찾기</button>
-  <button id="me"><i id="meDot"></i><span id="meName">나</span></button>
+  <button id="siteChip" type="button" class="chip" aria-expanded="false"><i></i><span id="statusText">모닥불…</span></button>
+  <div id="siteMenu" role="menu">
+    <button id="findSiteBtn" type="button">다른 모닥불 찾기</button>
+  </div>
+  <button id="findSite" type="button" tabindex="-1" aria-hidden="true">다른 모닥불 찾기</button>
+
+  <button id="me" type="button"><i id="meDot"></i><span id="meName">나</span></button>
   <div id="panel">
     <h4>NICKNAME</h4>
     <input id="nameInput" type="text" maxlength="20" autocomplete="off" spellcheck="false" />
-    <h4 style="margin-top:16px">OUTFIT</h4>
+    <h4 style="margin-top:14px">OUTFIT</h4>
     <div id="swatches"></div>
-    <button id="apply">변경</button>
+    <button id="apply" type="button">변경</button>
     <div id="panelMsg"></div>
   </div>
-  <div id="hint">드래그로 시점 · WASD 이동 · SHIFT 달리기 · F 앉기 · B 불멍</div>
-  <button id="bulmong">불멍</button>
-  <button id="sit">SIT</button>
+
+  <div class="brand">EMBERS<em>PRE-DAWN · FOREST CAMP</em></div>
+  <div id="hint">드래그 · WASD · F 앉기 · B 불멍</div>
+
   <div id="stick"><div id="knob"></div></div>
-  <div id="emoteBar">
-    <button type="button" data-emote="wave" title="1">손 흔들기</button>
-    <button type="button" data-emote="nod" title="2">끄덕</button>
-    <button type="button" data-emote="cheers" title="3">건배</button>
+
+  <div id="rightDock">
+    <button id="sit" class="dockBtn" type="button"><span class="ico">🪑</span><span class="lbl">SIT</span></button>
+    <button id="bulmong" class="dockBtn" type="button"><span class="ico">🔥</span><span class="lbl">불멍</span></button>
+    <div id="emoteWrap">
+      <button id="emoteToggle" class="dockBtn" type="button"><span class="ico">👋🏻</span><span class="lbl">이모트</span></button>
+      <div id="emoteBar">
+        <button type="button" data-emote="wave" title="1">👋🏻 손</button>
+        <button type="button" data-emote="nod" title="2">🙂 끄덕</button>
+        <button type="button" data-emote="cheers" title="3">🥂 건배</button>
+      </div>
+    </div>
+    <button id="chatBtn" class="dockBtn" type="button"><span class="ico">💬</span><span class="lbl">말</span></button>
   </div>
-  <button id="chatBtn" type="button">말풍선</button>
-  <div id="fireActions">
-    <button id="addLog" type="button">장작 넣기</button>
-    <button id="wishBtn" type="button">소원 태우기</button>
-    <button id="roastBtn" type="button">마시멜로</button>
+  <div id="actionWrap">
+    <button id="actionToggle" class="dockBtn" type="button"><span class="ico">🪵</span><span class="lbl">행동</span></button>
+    <div id="fireActions">
+      <button id="addLog" type="button">🪵 장작</button>
+      <button id="wishBtn" type="button">✨ 소원</button>
+      <button id="roastBtn" type="button">🍡 마시멜로</button>
+    </div>
   </div>
 </div>
+
 <div id="wishBox"><input id="wishInput" type="text" maxlength="40" autocomplete="off" spellcheck="false" placeholder="소원 한 줄 (최대 40자)" /></div>
 <div id="chatBox"><input id="chatInput" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="메시지 (최대 60자)" /></div>
 <div id="reasonPanel">
@@ -201,14 +282,15 @@
   <button type="button" data-act="block">차단</button>
   <button type="button" data-act="report">신고</button>
 </div>
-<div id="bulmongBanner">불멍 모드 · ESC / B 로 나가기</div>
+<div id="bulmongBanner">불멍 모드 · <span class="hintDesk">ESC / B 로 나가기</span><span class="hintTouch">화면을 탭하면 메뉴가 나와요</span></div>
 <div id="bulmongTimer">10:00</div>
+<button id="bulmongExit" type="button" aria-label="불멍 나가기">나가기</button>
 
 <button id="audioUnlock" type="button">🔊 소리 켜기</button>
 <div id="mixer">
-  <button id="mixerChip" type="button">사운드</button>
+  <button id="mixerChip" type="button" aria-label="사운드">🔊</button>
   <div id="mixerPanel">
-    <div class="mixRow"><label for="mixFire">불</label><input id="mixFire" type="range" min="0" max="100" value="72" /></div>
+    <div class="mixRow"><label for="mixFire">불</label><input id="mixFire" type="range" min="0" max="100" value="50" /></div>
     <div class="mixRow"><label for="mixBugs">벌레</label><input id="mixBugs" type="range" min="0" max="100" value="32" /></div>
     <div class="mixRow"><label for="mixWind">바람</label><input id="mixWind" type="range" min="0" max="100" value="38" /></div>
     <button id="mixerMute" type="button">음소거</button>
