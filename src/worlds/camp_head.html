@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>EMBERS — Campfire</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:#05070c;overflow:hidden;color:#fff;
+    font-family:"Helvetica Neue",Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    -webkit-font-smoothing:antialiased;touch-action:none;overscroll-behavior:none}
+  canvas{display:block}
+  #app{position:fixed;inset:0;opacity:0;transition:opacity 1.6s ease}
+  #app.ready{opacity:1}
+  #ui{position:fixed;inset:0;pointer-events:none;touch-action:none;transition:opacity .7s ease}
+  #ui.hide{opacity:0;pointer-events:none}
+  .brand{position:absolute;top:22px;left:24px;font-size:11px;font-weight:700;letter-spacing:.42em;opacity:.9}
+  .brand em{display:block;font-style:normal;margin-top:7px;font-size:9px;letter-spacing:.18em;font-weight:400;color:#ff9a4a}
+  #status{position:absolute;top:62px;left:24px;display:flex;align-items:center;gap:8px;
+    padding:8px 14px;border-radius:999px;border:1px solid rgba(255,154,74,.28);
+    background:rgba(255,120,40,.07);font-size:11px;letter-spacing:.06em;color:#ffe0c2;
+    backdrop-filter:blur(10px)}
+  #status i{width:7px;height:7px;border-radius:50%;background:#ff9a4a;box-shadow:0 0 10px #ff9a4a}
+  #me{position:absolute;top:16px;right:16px;pointer-events:auto;display:flex;align-items:center;gap:8px;
+    padding:9px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.05);color:#fff;font-size:11px;letter-spacing:.1em;cursor:pointer;
+    transition:.22s;backdrop-filter:blur(10px);max-width:44vw}
+  #me:hover{background:rgba(255,154,74,.16);border-color:rgba(255,154,74,.55)}
+  #meDot{width:9px;height:9px;border-radius:50%;background:#ff9a4a;box-shadow:0 0 10px currentColor;flex:0 0 auto}
+  #meName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #panel{position:absolute;top:68px;right:16px;width:252px;pointer-events:auto;
+    padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.16);
+    background:rgba(8,10,14,.88);backdrop-filter:blur(18px);
+    box-shadow:0 18px 50px rgba(0,0,0,.6);
+    opacity:0;transform:translateY(-8px) scale(.98);pointer-events:none;transition:.2s ease}
+  #panel.open{opacity:1;transform:none;pointer-events:auto}
+  #panel h4{font-size:9px;letter-spacing:.28em;font-weight:700;color:rgba(255,255,255,.55);margin-bottom:8px}
+  #nameInput{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
+    background:rgba(255,255,255,.06);color:#fff;font-size:13px;font-family:inherit;outline:none}
+  #nameInput:focus{border-color:rgba(255,154,74,.7);box-shadow:0 0 0 3px rgba(255,154,74,.12)}
+  #swatches{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 16px}
+  #swatches button{width:26px;height:26px;border-radius:50%;border:2px solid transparent;
+    cursor:pointer;padding:0;transition:.18s;outline:none}
+  #swatches button:hover{transform:scale(1.12)}
+  #swatches button.on{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+  #apply{width:100%;padding:11px;border-radius:10px;border:1px solid rgba(255,154,74,.5);
+    background:rgba(255,154,74,.14);color:#ffd7b0;font-size:11px;font-weight:700;letter-spacing:.2em;
+    cursor:pointer;transition:.2s;font-family:inherit}
+  #apply:hover{background:rgba(255,154,74,.26)}
+  #panelMsg{font-size:10px;color:rgba(255,255,255,.5);margin-top:9px;min-height:12px;letter-spacing:.04em}
+  #panelMsg.err{color:#ff9ab8}
+  #hint{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);font-size:11px;letter-spacing:.12em;
+    color:rgba(255,255,255,.5);text-align:center;white-space:nowrap;transition:opacity 1.4s}
+  #hint.hide{opacity:0}
+  #sit{position:absolute;right:16px;bottom:34px;pointer-events:auto;padding:14px 22px;border-radius:999px;
+    border:1px solid rgba(255,154,74,.45);background:rgba(255,154,74,.1);color:#ffc98a;
+    font-size:11px;font-weight:700;letter-spacing:.24em;cursor:pointer;transition:.22s;backdrop-filter:blur(10px)}
+  #sit:hover{background:rgba(255,154,74,.22)}
+  #sit.on{background:rgba(255,120,40,.28);border-color:rgba(255,180,80,.8);color:#ffe4c4;
+    box-shadow:0 0 26px rgba(255,120,40,.45)}
+  #bulmong{position:absolute;right:16px;bottom:98px;pointer-events:auto;padding:12px 18px;border-radius:999px;
+    border:1px solid rgba(180,210,255,.35);background:rgba(40,60,100,.18);color:#cfe0ff;
+    font-size:10px;font-weight:700;letter-spacing:.2em;cursor:pointer;transition:.22s;backdrop-filter:blur(10px)}
+  #bulmong:hover{background:rgba(80,120,200,.22)}
+  #bulmong.on{background:rgba(60,90,160,.35);border-color:rgba(180,210,255,.7);color:#fff;
+    box-shadow:0 0 22px rgba(100,140,220,.4)}
+  #stick{position:absolute;left:24px;bottom:34px;width:118px;height:118px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.16);pointer-events:auto;display:none;touch-action:none;
+    background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.07),rgba(255,255,255,.015))}
+  #knob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;
+    background:rgba(255,220,180,.55);box-shadow:0 0 24px rgba(255,120,40,.55)}
+  @media (pointer:coarse){#stick{display:block}#hint{display:none}}
+  #bulmongBanner{position:absolute;left:50%;top:28px;transform:translateX(-50%);
+    font-size:10px;letter-spacing:.32em;color:rgba(255,220,180,.55);opacity:0;transition:opacity 1s;
+    pointer-events:none}
+  #bulmongBanner.show{opacity:1}
+
+  #bulmongTimer{position:absolute;left:50%;top:52px;transform:translateX(-50%);
+    font-size:10px;letter-spacing:.28em;color:rgba(255,220,180,.45);opacity:0;transition:opacity .8s;
+    pointer-events:none}
+  #bulmongTimer.show{opacity:1}
+  #findSite{position:absolute;top:104px;left:24px;pointer-events:auto;padding:8px 14px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#e8dcc8;
+    font-size:10px;font-weight:700;letter-spacing:.12em;cursor:pointer;backdrop-filter:blur(10px);display:none}
+  #findSite:hover{background:rgba(255,154,74,.16);border-color:rgba(255,154,74,.5)}
+  #findSite.show{display:block}
+
+  #audioUnlock{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;
+    pointer-events:auto;padding:16px 28px;border-radius:999px;
+    border:1px solid rgba(255,200,120,.55);background:rgba(20,14,10,.88);
+    color:#ffe2c4;font:700 13px/1 system-ui,sans-serif;letter-spacing:.18em;
+    cursor:pointer;backdrop-filter:blur(12px);box-shadow:0 12px 40px rgba(0,0,0,.55);
+    transition:opacity .35s,transform .35s}
+  #audioUnlock:hover{background:rgba(255,154,74,.22)}
+  #audioUnlock[hidden]{display:none !important}
+  #mixer{position:fixed;left:16px;bottom:160px;z-index:35;pointer-events:auto;
+    width:210px;transition:opacity .35s}
+  @media (pointer:coarse){#mixer{bottom:170px}}
+  #mixerChip{display:none;width:100%;padding:10px 14px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.2);background:rgba(10,12,16,.78);color:#e8dcc8;
+    font:700 10px/1 system-ui,sans-serif;letter-spacing:.2em;cursor:pointer;backdrop-filter:blur(10px)}
+  #mixerPanel{padding:12px 14px 14px;border-radius:16px;border:1px solid rgba(255,255,255,.14);
+    background:rgba(8,10,14,.86);backdrop-filter:blur(14px);box-shadow:0 14px 36px rgba(0,0,0,.5)}
+  #mixer.bulmong{bottom:24px;left:16px;width:auto;min-width:120px}
+  #mixer.bulmong #mixerChip{display:block}
+  #mixer.bulmong:not(.open) #mixerPanel{display:none}
+  #mixer.bulmong.open{width:210px}
+  #mixer.bulmong.open #mixerPanel{display:block;margin-top:8px}
+  .mixRow{display:flex;align-items:center;gap:10px;margin:8px 0}
+  .mixRow label{flex:0 0 36px;font-size:10px;letter-spacing:.12em;color:rgba(255,230,200,.7)}
+  .mixRow input[type=range]{flex:1;accent-color:#ff9a4a;height:4px}
+  #mixerMute{width:100%;margin-top:8px;padding:9px;border-radius:10px;
+    border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#ddd;
+    font:700 10px/1 system-ui,sans-serif;letter-spacing:.16em;cursor:pointer}
+  #mixerMute.on{border-color:rgba(255,120,120,.5);color:#ffc0c0;background:rgba(255,80,80,.12)}
+
+  #emoteBar{position:absolute;right:16px;bottom:162px;pointer-events:auto;display:flex;flex-direction:column;gap:8px}
+  #emoteBar button{padding:10px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.2);
+    background:rgba(10,12,16,.72);color:#e8dcc8;font:700 10px/1 system-ui,sans-serif;letter-spacing:.14em;
+    cursor:pointer;backdrop-filter:blur(10px)}
+  #emoteBar button:hover{border-color:rgba(255,154,74,.55);background:rgba(255,154,74,.14)}
+  #chatBtn{position:absolute;right:16px;bottom:300px;pointer-events:auto;display:none;padding:10px 14px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.2);background:rgba(10,12,16,.72);color:#e8dcc8;
+    font:700 10px/1 system-ui,sans-serif;letter-spacing:.14em;cursor:pointer}
+  @media (pointer:coarse){#chatBtn{display:block}}
+  #chatBox{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:45;pointer-events:auto;
+    display:none;gap:8px;align-items:center;padding:10px 12px;border-radius:14px;
+    background:rgba(8,10,14,.92);border:1px solid rgba(255,200,140,.35);backdrop-filter:blur(12px)}
+  #chatBox.open{display:flex}
+  #chatInput{width:min(70vw,340px);padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
+    background:rgba(255,255,255,.06);color:#fff;font:500 14px/1.2 system-ui,sans-serif;outline:none}
+  #reasonPanel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:46;pointer-events:auto;
+    display:none;flex-direction:column;gap:8px;padding:18px;border-radius:16px;min-width:260px;
+    background:rgba(8,10,14,.94);border:1px solid rgba(255,200,140,.4);backdrop-filter:blur(14px)}
+  #reasonPanel.open{display:flex}
+  #reasonPanel h4{font:700 10px/1 system-ui,sans-serif;letter-spacing:.24em;color:rgba(255,230,200,.6);margin-bottom:4px}
+  #reasonPanel button{padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.06);color:#ffe8d0;font:600 13px/1.2 system-ui,sans-serif;cursor:pointer;text-align:left}
+  #reasonPanel button:hover{background:rgba(255,154,74,.18);border-color:rgba(255,154,74,.5)}
+  #peerMenu{position:fixed;z-index:47;display:none;flex-direction:column;gap:6px;padding:10px;border-radius:12px;
+    background:rgba(8,10,14,.94);border:1px solid rgba(255,255,255,.2);pointer-events:auto}
+  #peerMenu.open{display:flex}
+  #peerMenu button{padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);
+    background:rgba(255,255,255,.06);color:#eee;font:600 12px/1 system-ui,sans-serif;cursor:pointer}
+
+  #fireActions{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);pointer-events:auto;
+    display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  #fireActions button{padding:10px 14px;border-radius:999px;border:1px solid rgba(255,154,74,.4);
+    background:rgba(255,120,40,.12);color:#ffd7b0;font:700 10px/1 system-ui,sans-serif;letter-spacing:.14em;
+    cursor:pointer;backdrop-filter:blur(10px)}
+  #fireActions button:hover{background:rgba(255,154,74,.22)}
+  #wishBox{position:fixed;left:50%;bottom:160px;transform:translateX(-50%);z-index:45;pointer-events:auto;
+    display:none;gap:8px;align-items:center;padding:10px 12px;border-radius:14px;
+    background:rgba(8,10,14,.92);border:1px solid rgba(255,200,140,.35)}
+  #wishBox.open{display:flex}
+  #wishInput{width:min(70vw,300px);padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
+    background:rgba(255,255,255,.06);color:#fff;font:500 14px/1.2 system-ui,sans-serif;outline:none}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="ui">
+  <div class="brand">EMBERS<em>PRE-DAWN · FOREST CAMP</em></div>
+  <div id="status"><i></i><span id="statusText">모닥불 연결 중…</span></div>
+  <button id="findSite" type="button">다른 모닥불 찾기</button>
+  <button id="me"><i id="meDot"></i><span id="meName">나</span></button>
+  <div id="panel">
+    <h4>NICKNAME</h4>
+    <input id="nameInput" type="text" maxlength="20" autocomplete="off" spellcheck="false" />
+    <h4 style="margin-top:16px">OUTFIT</h4>
+    <div id="swatches"></div>
+    <button id="apply">변경</button>
+    <div id="panelMsg"></div>
+  </div>
+  <div id="hint">드래그로 시점 · WASD 이동 · SHIFT 달리기 · F 앉기 · B 불멍</div>
+  <button id="bulmong">불멍</button>
+  <button id="sit">SIT</button>
+  <div id="stick"><div id="knob"></div></div>
+  <div id="emoteBar">
+    <button type="button" data-emote="wave" title="1">손 흔들기</button>
+    <button type="button" data-emote="nod" title="2">끄덕</button>
+    <button type="button" data-emote="cheers" title="3">건배</button>
+  </div>
+  <button id="chatBtn" type="button">말풍선</button>
+  <div id="fireActions">
+    <button id="addLog" type="button">장작 넣기</button>
+    <button id="wishBtn" type="button">소원 태우기</button>
+    <button id="roastBtn" type="button">마시멜로</button>
+  </div>
+</div>
+<div id="wishBox"><input id="wishInput" type="text" maxlength="40" autocomplete="off" spellcheck="false" placeholder="소원 한 줄 (최대 40자)" /></div>
+<div id="chatBox"><input id="chatInput" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="메시지 (최대 60자)" /></div>
+<div id="reasonPanel">
+  <h4>오늘 불멍하러 온 이유</h4>
+  <button type="button" data-reason="퇴근하고 멍때리러">퇴근하고 멍때리러</button>
+  <button type="button" data-reason="잠이 안 와서">잠이 안 와서</button>
+  <button type="button" data-reason="그냥 구경">그냥 구경</button>
+  <button type="button" data-reason="+1">+1</button>
+</div>
+<div id="peerMenu">
+  <button type="button" data-act="block">차단</button>
+  <button type="button" data-act="report">신고</button>
+</div>
+<div id="bulmongBanner">불멍 모드 · ESC / B 로 나가기</div>
+<div id="bulmongTimer">10:00</div>
+
+<button id="audioUnlock" type="button">🔊 소리 켜기</button>
+<div id="mixer">
+  <button id="mixerChip" type="button">사운드</button>
+  <div id="mixerPanel">
+    <div class="mixRow"><label for="mixFire">불</label><input id="mixFire" type="range" min="0" max="100" value="72" /></div>
+    <div class="mixRow"><label for="mixBugs">벌레</label><input id="mixBugs" type="range" min="0" max="100" value="32" /></div>
+    <div class="mixRow"><label for="mixWind">바람</label><input id="mixWind" type="range" min="0" max="100" value="38" /></div>
+    <button id="mixerMute" type="button">음소거</button>
+  </div>
+</div>
+

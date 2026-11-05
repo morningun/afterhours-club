@@ -1,10 +1,10 @@
 #!/bin/bash
-# Bundle src/ into the single self-contained index.html.
+# Bundle src/app.src.js (ESM entry, resolves ./core/* + three) into single index.html.
 set -e
 cd "$(dirname "$0")"
-cat src/imports.js src/app.src.js > .build-app.js
-npx esbuild .build-app.js --bundle --format=iife --minify --target=es2020 \
+npx esbuild src/app.src.js --bundle --format=iife --minify --target=es2020 \
   --outfile=.build-bundle.js --log-level=warning
+node --check .build-bundle.js
 {
   cat src/shell_head.html
   printf '<script>\n'
@@ -12,5 +12,5 @@ npx esbuild .build-app.js --bundle --format=iife --minify --target=es2020 \
   printf '</script>\n'
   cat src/shell_tail.html
 } > index.html
-rm -f .build-app.js .build-bundle.js
+rm -f .build-bundle.js
 wc -c index.html

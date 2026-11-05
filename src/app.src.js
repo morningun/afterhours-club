@@ -1,3 +1,12 @@
+import { THREE, EffectComposer, RenderPass, UnrealBloomPass, OutputPass } from './imports.js';
+import {
+  neon, getShadowTex, makeAvatar, restyleRig, peerColor, nameTag
+} from './core/avatar.js';
+import { createKeyState, createLookControls, createJoystick } from './core/input.js';
+import { collide as collideWorld } from './core/player-movement.js';
+import { setupNicknameUI } from './core/nickname-ui.js';
+import { poseFromNet, netPoseFields, isPose } from './core/pose.js';
+
 /* ---------------- renderer ---------------- */
 const app = document.getElementById('app');
 const isMobile = matchMedia('(pointer:coarse)').matches;
@@ -65,29 +74,12 @@ djSpotB.target.position.set(0, 0, -2);
 scene.add(djSpotB, djSpotB.target);
 
 /* ---------------- helpers ---------------- */
-function neon(w, h, d, color, intensity = 2.2){
-  const m = new THREE.MeshStandardMaterial({
-    color: 0x000000, emissive: new THREE.Color(color), emissiveIntensity: intensity,
-    roughness: 1, metalness: 0
-  });
-  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-}
 function box(w, h, d, color, opts = {}){
   const m = new THREE.MeshStandardMaterial(Object.assign({
     color: new THREE.Color(color), roughness: 0.6, metalness: 0.3
   }, opts));
   return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
 }
-function shadowTex(){
-  const c = document.createElement('canvas'); c.width = c.height = 128;
-  const ctx = c.getContext('2d');
-  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  g.addColorStop(0, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
-  return new THREE.CanvasTexture(c);
-}
-const SHADOW_TEX = shadowTex();
-
 /* ---------------- floor & walls ---------------- */
 const floorMat = new THREE.MeshStandardMaterial({ color: 0x050409, roughness: 0.42, metalness: 0.6, envMapIntensity: 0.5 });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2 + 4, HALF_D * 2 + 4), floorMat);
@@ -407,7 +399,7 @@ function makeDancer(scale = 1){
   g.add(band);
 
   const sh = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95),
-    new THREE.MeshBasicMaterial({ map: SHADOW_TEX, transparent: true, depthWrite: false, opacity: 0.85 }));
+    new THREE.MeshBasicMaterial({ map: getShadowTex(), transparent: true, depthWrite: false, opacity: 0.85 }));
   sh.rotation.x = -Math.PI / 2;
   sh.position.y = 0.015;
   g.add(sh);
@@ -458,82 +450,7 @@ for (let i = 0; i < 3; i++){
   crowd.push({ obj: d, home: d.position.clone(), radius: 0, sp: 0.5, a: Math.random() * 6.28, static: true, seated: true });
 }
 
-/* ---------------- avatars ---------------- */
-const NET_COLORS = [0xff2e88, 0x00e5ff, 0x37ff8b, 0xffd166, 0x9b5cff, 0xff6b35, 0x4dd2ff, 0xff5ec8, 0x8affc1, 0xffe066];
-
-function makeAvatar(bodyColor, trimColor, withLight = true){
-  const group = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.55, metalness: 0.35 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xd9a37c, roughness: 0.6 });
-
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.62, 6, 16), bodyMat);
-  torso.position.y = 1.32;
-  group.add(torso);
-
-  const chest = neon(0.34, 0.05, 0.02, trimColor, 2.6);
-  chest.position.set(0, 1.42, 0.21);
-  group.add(chest);
-
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 20, 16), skinMat);
-  head.position.y = 1.92;
-  group.add(head);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    new THREE.MeshStandardMaterial({ color: 0x08060c, roughness: 0.9 }));
-  hair.position.y = 1.925;
-  group.add(hair);
-
-  const phones = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.028, 8, 22),
-    new THREE.MeshStandardMaterial({ color: 0x0a0a12, roughness: 0.4, metalness: 0.7,
-      emissive: new THREE.Color(trimColor), emissiveIntensity: 1.4 }));
-  phones.position.y = 1.94;
-  phones.rotation.y = Math.PI / 2;
-  group.add(phones);
-
-  const armL = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.52, 4, 10), bodyMat);
-  armL.position.set(-0.31, 1.36, 0);
-  group.add(armL);
-  const armR = armL.clone();
-  armR.position.x = 0.31;
-  group.add(armR);
-
-  const legL = new THREE.Mesh(new THREE.CapsuleGeometry(0.095, 0.66, 4, 10), bodyMat);
-  legL.position.set(-0.13, 0.42, 0);
-  group.add(legL);
-  const legR = legL.clone();
-  legR.position.x = 0.13;
-  group.add(legR);
-
-  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3),
-    new THREE.MeshBasicMaterial({ map: SHADOW_TEX, transparent: true, depthWrite: false, opacity: 0.9 }));
-  shadow.rotation.x = -Math.PI / 2;
-  shadow.position.y = 0.02;
-  group.add(shadow);
-
-  let light = null;
-  if (withLight){
-    light = new THREE.PointLight(trimColor, 6, 6, 2);
-    light.position.set(0, 2.4, 0);
-    group.add(light);
-  }
-
-  return {
-    group, torso, chest, head, hair, phones, armL, armR, legL, legR, shadow, light,
-    bodyMat, skinMat, headBaseY: 1.92, phase: Math.random() * 6.283
-  };
-}
-
-/* an outfit colour is the neon trim; the cloth itself is a dark tint of it */
-function bodyTint(trimHex){
-  return new THREE.Color(trimHex).multiplyScalar(0.34);
-}
-
-function restyleRig(rig, trimHex){
-  rig.bodyMat.color.copy(bodyTint(trimHex));
-  rig.chest.material.emissive.set(trimHex);
-  rig.phones.material.emissive.set(trimHex);
-  if (rig.light) rig.light.color.set(trimHex);
-  rig.trim = trimHex;
-}
+/* ---------------- avatars (from src/core/avatar.js) ---------------- */
 
 /* the local player uses the same body as everyone else, just its own colours */
 const playerRig = makeAvatar(0x150e22, 0xff2e88, true);
@@ -560,35 +477,27 @@ const playerState = {
   speed: 0,
   run: 0,
   bob: 0,
-  dance: false,
-  danceMix: 0,
-  danceT: 0
+  pose: 'idle',
+  poseMix: 0,
+  poseT: 0
 };
 
 /* ---------------- input ---------------- */
-const keys = Object.create(null);
-addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
-  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') playerState.run = 1;
-});
-addEventListener('keyup', e => {
-  keys[e.code] = false;
-  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') playerState.run = 0;
-});
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+const keys = createKeyState({ onRun: v => { playerState.run = v; } });
 
-/* dance toggle */
+/* pose toggle — club F = dance */
 const danceBtn = document.getElementById('dance');
-function setDance(on){
-  playerState.dance = on;
-  if (on) playerState.danceT = 0;
+function setPose(pose){
+  if (!isPose(pose)) pose = 'idle';
+  playerState.pose = pose;
+  if (pose === 'dance') playerState.poseT = 0;
+  const on = pose === 'dance';
   danceBtn.classList.toggle('on', on);
   danceBtn.textContent = on ? 'DANCING' : 'DANCE';
 }
-danceBtn.addEventListener('click', () => setDance(!playerState.dance));
+danceBtn.addEventListener('click', () => setPose(playerState.pose === 'dance' ? 'idle' : 'dance'));
 addEventListener('keydown', e => {
-  if (e.code === 'KeyF' && !e.repeat) setDance(!playerState.dance);
+  if (e.code === 'KeyF' && !e.repeat) setPose(playerState.pose === 'dance' ? 'idle' : 'dance');
 });
 
 /* ---------------- presence: other people in the room ---------------- */
@@ -619,64 +528,6 @@ function setNetState(state, n){
 }
 setNetState('connecting', 1);
 
-/* nickname floating above a head */
-function nameTag(text, hex){
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  const font = '600 34px "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
-  const measure = document.createElement('canvas').getContext('2d');
-  measure.font = font;
-  const wCss = Math.ceil(measure.measureText(text).width) + 34;
-  const hCss = 56;
-
-  const c = document.createElement('canvas');
-  c.width = Math.ceil(wCss * dpr);
-  c.height = Math.ceil(hCss * dpr);
-  const ctx = c.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  const rgb = new THREE.Color(hex);
-  const css = 'rgb(' + Math.round(rgb.r * 255) + ',' + Math.round(rgb.g * 255) + ',' + Math.round(rgb.b * 255) + ')';
-
-  const r = 26;
-  ctx.beginPath();
-  ctx.moveTo(r, 4);
-  ctx.arcTo(wCss - 4, 4, wCss - 4, hCss - 4, r);
-  ctx.arcTo(wCss - 4, hCss - 4, 4, hCss - 4, r);
-  ctx.arcTo(4, hCss - 4, 4, 4, r);
-  ctx.arcTo(4, 4, wCss - 4, 4, r);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(6,4,12,0.74)';
-  ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = css;
-  ctx.stroke();
-
-  ctx.font = font;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = css;
-  ctx.shadowBlur = 12;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(text, wCss / 2, hCss / 2 + 1);
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.minFilter = THREE.LinearFilter;
-  tex.generateMipmaps = false;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: tex, transparent: true, depthWrite: false, depthTest: false, fog: false
-  }));
-  const hWorld = 0.30;
-  sprite.scale.set(hWorld * (wCss / hCss), hWorld, 1);
-  sprite.position.set(0, 2.42, 0);
-  sprite.renderOrder = 20;
-  return sprite;
-}
-
-function peerColor(index){
-  return NET_COLORS[((index % NET_COLORS.length) + NET_COLORS.length) % NET_COLORS.length];
-}
-
 function addPeer(s){
   if (!s || peers.has(s.id) || s.id === NET.id) return;
   const trim = peerColor(s.color || 0);
@@ -692,8 +543,8 @@ function addPeer(s){
     id: s.id, name: s.name || '게스트', rig, tag,
     x: s.x || 0, z: s.z || 0, yaw: s.yaw || 0,
     tx: s.x || 0, tz: s.z || 0, tyaw: s.yaw || 0,
-    on: s.on ? 1 : 0, dance: s.dance ? 1 : 0,
-    speed: 0, bob: 0, danceMix: 0, danceT: Math.random() * 4.5
+    on: s.on ? 1 : 0, pose: poseFromNet(s),
+    speed: 0, bob: 0, poseMix: 0, poseT: Math.random() * 4.5
   });
   setNetState('online', peers.size + 1);
 }
@@ -785,7 +636,7 @@ function updatePeer(p, dt, el, beat){
   p.bob += dt * (moving ? Math.max(p.speed, 1.4) * 3.4 : 0);
   const swing = Math.sin(p.bob) * Math.min(1, Math.max(p.speed, 1) / 3);
 
-  p.danceMix = THREE.MathUtils.damp(p.danceMix, (p.dance && !moving) ? 1 : 0, 7, dt);
+  p.poseMix = THREE.MathUtils.damp(p.poseMix, (p.pose === 'dance' && !moving) ? 1 : 0, 7, dt);
 
   const idle = Math.abs(Math.sin(el + p.rig.phase)) * (0.02 + beat * 0.025);
   let legLx = swing * 0.85, legRx = -swing * 0.85;
@@ -795,10 +646,10 @@ function updatePeer(p, dt, el, beat){
   let bodyY = moving ? Math.abs(Math.sin(p.bob)) * 0.055 : idle;
   let headY = 1.92, yawExtra = 0;
 
-  if (p.danceMix > 0.002){
-    p.danceT += dt;
-    const d = danceSeg(p.danceT, beat);
-    const m = p.danceMix;
+  if (p.poseMix > 0.002){
+    p.poseT += dt;
+    const d = danceSeg(p.poseT, beat);
+    const m = p.poseMix;
     legLx = THREE.MathUtils.lerp(legLx, d.legLx, m);
     legRx = THREE.MathUtils.lerp(legRx, d.legRx, m);
     armLx = THREE.MathUtils.lerp(armLx, d.armLx, m);
@@ -824,7 +675,7 @@ function updatePeer(p, dt, el, beat){
   rig.head.position.y = headY;
   rig.group.position.set(p.x, bodyY, p.z);
   rig.group.rotation.y = p.yaw + yawExtra;
-  rig.chest.material.emissiveIntensity = 1.6 + beat * 2.4 + p.danceMix * 1.6;
+  rig.chest.material.emissiveIntensity = 1.6 + beat * 2.4 + p.poseMix * 1.6;
   if (rig.light) rig.light.intensity = 3.4 + beat * 4.5;
 }
 
@@ -865,7 +716,7 @@ function handleNet(m){
     if (!p){ addPeer(m); return; }
     p.tx = m.x; p.tz = m.z; p.tyaw = m.yaw;
     p.on = m.on ? 1 : 0;
-    p.dance = m.dance ? 1 : 0;
+    p.pose = poseFromNet(m);
   } else if (m.t === 'set'){
     const p = peers.get(m.id);
     if (!p){ addPeer(m); return; }
@@ -931,7 +782,7 @@ function pumpNet(){
       z: +player.position.z.toFixed(2),
       yaw: +playerState.yaw.toFixed(2),
       on: playerState.speed > 0.15 ? 1 : 0,
-      dance: playerState.dance ? 1 : 0
+      ...netPoseFields(playerState.pose)
     }));
   } catch (e) { /* ignore */ }
 }
@@ -951,76 +802,6 @@ addEventListener('pagehide', () => {
 connectNet();
 
 /* ---------------- my nickname + outfit ---------------- */
-const meBtn = document.getElementById('me');
-const meDot = document.getElementById('meDot');
-const meName = document.getElementById('meName');
-const panel = document.getElementById('panel');
-const nameInput = document.getElementById('nameInput');
-const swatches = document.getElementById('swatches');
-const applyBtn = document.getElementById('apply');
-const panelMsg = document.getElementById('panelMsg');
-
-const STORE_NAME = 'afterhours.name';
-const STORE_COLOR = 'afterhours.color';
-
-const ME = { color: 0, name: '' };
-
-function cssOf(hex){
-  const c = new THREE.Color(hex);
-  return 'rgb(' + Math.round(c.r * 255) + ',' + Math.round(c.g * 255) + ',' + Math.round(c.b * 255) + ')';
-}
-
-function paintSwatches(){
-  swatches.innerHTML = '';
-  NET_COLORS.forEach((hex, i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.dataset.i = String(i);
-    b.style.background = cssOf(hex);
-    b.setAttribute('aria-label', '옷 색 ' + (i + 1));
-    b.addEventListener('click', () => {
-      ME.color = i;
-      for (const el of swatches.children) el.classList.toggle('on', el === b);
-      panelMsg.textContent = '';
-      panelMsg.classList.remove('err');
-    });
-    swatches.appendChild(b);
-  });
-  markSwatch(ME.color);
-}
-
-function markSwatch(i){
-  for (const el of swatches.children) el.classList.toggle('on', Number(el.dataset.i) === i);
-}
-
-/* paint my own body + the pill that names me */
-function retagPlayer(name, hex){
-  if (playerTag){
-    player.remove(playerTag);
-    if (playerTag.material.map) playerTag.material.map.dispose();
-    playerTag.material.dispose();
-  }
-  playerTag = nameTag(name, hex);
-  player.add(playerTag);
-}
-
-function applyMe(name, colorIdx, remember){
-  ME.color = colorIdx;
-  ME.name = name || ME.name;
-  restyleRig(playerRig, peerColor(colorIdx));
-  if (name) retagPlayer(name, peerColor(colorIdx));
-  meDot.style.background = cssOf(peerColor(colorIdx));
-  meDot.style.color = cssOf(peerColor(colorIdx));
-  meName.textContent = ME.name || '나';
-  markSwatch(colorIdx);
-  if (remember){
-    try {
-      localStorage.setItem(STORE_NAME, ME.name);
-      localStorage.setItem(STORE_COLOR, String(colorIdx));
-    } catch (e) { /* private mode */ }
-  }
-}
-
 function sendProfile(name, colorIdx){
   const ws = NET.ws;
   if (!ws || ws.readyState !== 1 || !NET.id) return false;
@@ -1030,111 +811,27 @@ function sendProfile(name, colorIdx){
   } catch (e) { return false; }
 }
 
-function setPanelMsg(text, bad){
-  panelMsg.textContent = text;
-  panelMsg.classList.toggle('err', !!bad);
-}
-
-function openPanel(open){
-  panel.classList.toggle('open', open);
-  if (open){
-    nameInput.value = ME.name;
-    nameInput.focus();
-    nameInput.select();
-    panelMsg.textContent = '';
-  }
-}
-meBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  openPanel(!panel.classList.contains('open'));
+const nick = setupNicknameUI({
+  storageKeyPrefix: 'afterhours',
+  playerRig,
+  player,
+  getPlayerTag: () => playerTag,
+  setPlayerTag: (t) => { playerTag = t; },
+  sendProfile,
+  onApplied: (me) => { if (me.name) NET.name = me.name; }
 });
-panel.addEventListener('click', e => e.stopPropagation());
-addEventListener('pointerdown', e => {
-  if (panel.classList.contains('open') && !panel.contains(e.target) && !meBtn.contains(e.target)) openPanel(false);
-});
+const ME = nick.ME;
+const applyMe = nick.applyMe;
+const retagPlayer = nick.retagPlayer;
+/* sync NET.name if restore found a saved nickname */
+if (ME.name) NET.name = ME.name;
 
-function commit(){
-  const want = nameInput.value.replace(/\s+/g, ' ').trim().slice(0, 20);
-  if (!want){ setPanelMsg('닉네임을 입력해 주세요.', true); nameInput.focus(); return; }
-
-  const sent = sendProfile(want, ME.color);
-  applyMe(want, ME.color, true);
-
-  if (sent) setPanelMsg('다른 사람 화면에도 반영됐어요.');
-  else setPanelMsg('저장했어요. 서버에 붙으면 그때 함께 반영됩니다.', true);
-  openPanel(false);
-}
-applyBtn.addEventListener('click', commit);
-nameInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter'){ e.preventDefault(); commit(); }
-  if (e.key === 'Escape'){ e.preventDefault(); openPanel(false); }
-});
-addEventListener('keydown', e => {
-  if (e.key === 'Escape' && panel.classList.contains('open')) openPanel(false);
-});
-
-/* start from what I chose last time */
-(function restoreMe(){
-  let name = '', color = 0;
-  try {
-    name = localStorage.getItem(STORE_NAME) || '';
-    const c = Number(localStorage.getItem(STORE_COLOR));
-    if (Number.isInteger(c) && c >= 0 && c < NET_COLORS.length) color = c;
-  } catch (e) { /* private mode */ }
-  ME.color = color;
-  paintSwatches();
-  restyleRig(playerRig, peerColor(color));
-  meDot.style.background = cssOf(peerColor(color));
-  meDot.style.color = cssOf(peerColor(color));
-  markSwatch(color);
-  /* only claim a nickname the user actually saved; otherwise keep the server's */
-  if (name){ ME.name = name; NET.name = name; meName.textContent = name; retagPlayer(name, peerColor(color)); }
-})();
-
-/* mouse / touch look */
-const look = { yaw: 0, pitch: -0.13, dragging: false, lastX: 0, lastY: 0, id: null };
+/* mouse / touch look + virtual joystick */
 const canvasEl = renderer.domElement;
-
-canvasEl.addEventListener('pointerdown', e => {
-  look.dragging = true; look.id = e.pointerId;
-  look.lastX = e.clientX; look.lastY = e.clientY;
-  canvasEl.setPointerCapture(e.pointerId);
-});
-canvasEl.addEventListener('pointermove', e => {
-  if (!look.dragging || e.pointerId !== look.id) return;
-  const dx = e.clientX - look.lastX, dy = e.clientY - look.lastY;
-  look.lastX = e.clientX; look.lastY = e.clientY;
-  look.yaw -= dx * 0.0042;
-  look.pitch = THREE.MathUtils.clamp(look.pitch - dy * 0.0032, -0.55, 0.42);
-});
-const endDrag = e => { if (e.pointerId === look.id) { look.dragging = false; look.id = null; } };
-canvasEl.addEventListener('pointerup', endDrag);
-canvasEl.addEventListener('pointercancel', endDrag);
-
-/* virtual joystick */
+const look = createLookControls(canvasEl);
 const stick = document.getElementById('stick');
 const knob = document.getElementById('knob');
-const moveVec = { x: 0, y: 0 };
-let stickId = null;
-function stickMove(e){
-  const r = stick.getBoundingClientRect();
-  let x = e.clientX - (r.left + r.width / 2);
-  let y = e.clientY - (r.top + r.height / 2);
-  const max = r.width * 0.36;
-  const len = Math.hypot(x, y);
-  if (len > max){ x = x / len * max; y = y / len * max; }
-  knob.style.transform = `translate(${x}px, ${y}px)`;
-  moveVec.x = x / max; moveVec.y = y / max;
-}
-stick.addEventListener('pointerdown', e => { stickId = e.pointerId; stick.setPointerCapture(e.pointerId); stickMove(e); });
-stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) stickMove(e); });
-const stickEnd = e => {
-  if (e.pointerId !== stickId) return;
-  stickId = null; moveVec.x = 0; moveVec.y = 0;
-  knob.style.transform = 'translate(0px, 0px)';
-};
-stick.addEventListener('pointerup', stickEnd);
-stick.addEventListener('pointercancel', stickEnd);
+const moveVec = createJoystick(stick, knob);
 
 /* ---------------- procedural audio ---------------- */
 const audio = { ctx: null, master: null, on: false, next: 0, step: 0, bpm: 124, timer: null };
@@ -1280,17 +977,7 @@ const obstacles = [
   { x: 14.2, z: 6.9, w: 0.85, d: 0.85 }    /* lounge table */
 ];
 function collide(p, r){
-  p.x = THREE.MathUtils.clamp(p.x, -HALF_W + r + 0.4, HALF_W - r - 0.4);
-  p.z = THREE.MathUtils.clamp(p.z, -HALF_D + r + 0.4, HALF_D - r - 0.4);
-  for (const o of obstacles){
-    const dx = p.x - o.x, dz = p.z - o.z;
-    const hx = o.w / 2 + r, hz = o.d / 2 + r;
-    if (Math.abs(dx) < hx && Math.abs(dz) < hz){
-      const ox = hx - Math.abs(dx), oz = hz - Math.abs(dz);
-      if (ox < oz) p.x = o.x + Math.sign(dx || 1) * hx;
-      else p.z = o.z + Math.sign(dz || 1) * hz;
-    }
-  }
+  collideWorld(p, r, { halfW: HALF_W, halfD: HALF_D }, obstacles);
 }
 
 /* ---------------- LED wall drawing ---------------- */
@@ -1416,7 +1103,7 @@ function tick(){
   if (mag > 0.02){ ix /= Math.max(mag, 0.0001); iz /= Math.max(mag, 0.0001); }
   else { ix = 0; iz = 0; }
   const walking = mag > 0.05;
-  if (walking && playerState.dance) setDance(false);
+  if (walking && playerState.pose === 'dance') setPose('idle');
   const targetSpeed = walking ? (playerState.run ? 5.4 : 2.7) * Math.min(1, mag * 1.4) : 0;
   playerState.speed = THREE.MathUtils.damp(playerState.speed, targetSpeed, 9, dt);
 
@@ -1440,8 +1127,8 @@ function tick(){
   playerState.bob += dt * (moving ? playerState.speed * 3.4 : 0);
   const swing = Math.sin(playerState.bob) * Math.min(1, playerState.speed / 3);
 
-  playerState.danceMix = THREE.MathUtils.damp(
-    playerState.danceMix, (playerState.dance && !moving) ? 1 : 0, 7, dt);
+  playerState.poseMix = THREE.MathUtils.damp(
+    playerState.poseMix, (playerState.pose === 'dance' && !moving) ? 1 : 0, 7, dt);
 
   const idle = Math.abs(Math.sin(elapsed * 2.6)) * (0.02 + beat * 0.025);
 
@@ -1455,10 +1142,10 @@ function tick(){
   let headY = 1.92 + (moving ? 0 : Math.sin(elapsed * 2.6) * 0.015);
   let yawExtra = 0;
 
-  const mix = playerState.danceMix;
+  const mix = playerState.poseMix;
   if (mix > 0.002){
-    playerState.danceT += dt;
-    const s = playerState.danceT;
+    playerState.poseT += dt;
+    const s = playerState.poseT;
     const seg = Math.floor(s / 4.5) % 3;
     let dLegLx = 0, dLegRx = 0, dArmLx = 0, dArmRx = 0;
     let dArmLz = 0, dArmRz = 0, dTorsoZ = 0, dTorsoY = 0, dBodyY = 0, dHeadY = 1.92, dYaw = 0;

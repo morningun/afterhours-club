@@ -2,11 +2,12 @@
   "name": "afterhours-multiplayer",
   "version": "1.0.0",
   "private": true,
-  "description": "AFTERHOURS 3D club — single-file Three.js site plus its presence relay",
+  "description": "AFTERHOURS 3D club \u2014 single-file Three.js site plus its presence relay",
   "scripts": {
-    "build": "bash build.sh",
+    "build": "node build.mjs",
     "start": "node server/server.js",
-    "serve": "python3 -m http.server 8080"
+    "serve": "python3 -m http.server 8080",
+    "build:camp": "node build.mjs camp"
   },
   "dependencies": {
     "esbuild": "^0.21.5",

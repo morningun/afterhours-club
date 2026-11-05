@@ -25,16 +25,18 @@ jobs:
 
       - run: npm ci || npm install
       - run: npm run build
+      - run: npm run build:camp
 
       - name: Push built site to gh-pages
         run: |
           mkdir -p /tmp/site
           cp index.html /tmp/site/index.html
+          cp camp.html /tmp/site/camp.html
           cd /tmp/site
           git init -q
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html
+          git add index.html camp.html
           git commit -qm "Build from ${GITHUB_SHA::7}"
           git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:gh-pages
         env:
