@@ -1095,6 +1095,29 @@ if (portal.arrival){
   smoothTarget.set(a.x, 1.6, a.z);
 }
 
+/* ---------------- minimap, top-left (src/core/minimap.js) ---------------- */
+import { createMinimap } from './core/minimap.js';
+const minimap = createMinimap({
+  view: { minX: -HALF_W, maxX: HALF_W, minZ: -HALF_D, maxZ: HALF_D }, /* room walls */
+  bg: 'rgba(10,6,20,.6)',
+  shapes: [
+    { t: 'rect', x: 0, z: 0, w: HALF_W * 2 - 0.4, d: HALF_D * 2 - 0.4, stroke: 'rgba(155,92,255,.55)', lw: 1.5 },  /* walls */
+    { t: 'rect', x: 0, z: 0.6, w: frameW, d: frameD, fill: 'rgba(255,46,136,.10)', stroke: 'rgba(255,46,136,.75)' }, /* dance floor */
+    { t: 'rect', x: 0, z: -11.2, w: 9, d: 1.9, fill: 'rgba(255,46,136,.45)' },                                   /* DJ booth */
+    { t: 'rect', x: -15.2, z: 4.5, w: 7.6, d: 1.15, rot: Math.PI / 2, fill: 'rgba(0,229,255,.5)' },              /* bar */
+    { t: 'rect', x: 14.2, z: 3.0, w: 4.6, d: 1.7, fill: 'rgba(155,92,255,.45)' },                                /* lounge */
+    { t: 'line', x1: 16.9, z1: -4.7, x2: 16.9, z2: -2.3, stroke: '#ff8a3a', lw: 2.5 }                            /* portal */
+  ],
+  labels: [
+    { x: 0, z: -9.2, text: 'DJ' }, { x: -12.6, z: 4.5, text: 'BAR', color: 'rgba(120,240,255,.75)' },
+    { x: 13.4, z: -3.5, text: 'EMBERS', color: 'rgba(255,170,100,.9)' }
+  ],
+  getSelf: () => player.position, getSelfYaw: () => playerState.yaw,
+  getSelfColor: () => playerRig.chest.material.emissive.getHex(),
+  getPeers: () => peers,
+  layout: { left: 24, top: 102, size: 160, hudHalf: 80 }
+});
+
 /* ---------------- resize ---------------- */
 function onResize(){
   const w = innerWidth, h = innerHeight;
@@ -1310,6 +1333,7 @@ function tick(){
 
   /* --- other people in the room --- */
   updateNet(dt, elapsed, beat);
+  minimap.update();
   portal.update(dt, elapsed);
 
   /* --- DJ --- */

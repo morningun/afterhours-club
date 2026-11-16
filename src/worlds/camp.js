@@ -1224,6 +1224,32 @@ if (portal.arrival){
   };
 }
 
+/* ---------------- minimap, top-left (src/core/minimap.js) ---------------- */
+import { createMinimap } from '../core/minimap.js';
+const minimap = createMinimap({
+  view: { minX: -13, maxX: 13, minZ: -13, maxZ: 13 }, /* camp clearing; world bounds ±HALF are forest */
+  bg: 'rgba(14,22,18,.55)',
+  shapes: [
+    { t: 'circle', x: 0, z: 0, r: 8.5, fill: 'rgba(60,48,34,.45)', stroke: 'rgba(255,200,140,.28)' }, /* clearing (trees r≥8.5) */
+    { t: 'rect', x: -4.25, z: -4.25, w: 3.6, d: 3.6, rot: Math.PI / 4, fill: 'rgba(120,80,40,.35)', stroke: 'rgba(255,170,90,.35)' }, /* mole field */
+    ...[0, 1, 2, 3, 4, 5].map(i => { const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      return { t: 'circle', x: Math.cos(a) * CHAIR_R, z: Math.sin(a) * CHAIR_R, r: 0.35, fill: 'rgba(150,105,65,.8)' }; }),
+    { t: 'rect', x: -7.5, z: 4.5, w: 2.4, d: 2.2, rot: 0.6, fill: 'rgba(90,120,90,.75)' },   /* tents */
+    { t: 'rect', x: 8.2, z: 3.2, w: 2.4, d: 2.2, rot: -0.9, fill: 'rgba(130,100,70,.75)' },
+    { t: 'circle', x: 2.8, z: -4.2, r: 0.3, fill: '#ffd27a' },                               /* lantern */
+    { t: 'line', x1: -1.2, z1: -7.6, x2: 1.2, z2: -7.6, stroke: '#ff2e88', lw: 2.5 },          /* portal */
+    { t: 'line', x1: -0.8, z1: -7.3, x2: 0.8, z2: -7.3, stroke: 'rgba(0,229,255,.8)', lw: 1 },
+    { t: 'circle', x: 0, z: 0, r: 0.95, fill: '#ff8a2a', stroke: 'rgba(255,220,150,.9)' }    /* fire */
+  ],
+  labels: [{ x: 0, z: -9.6, text: 'AFTERHOURS', color: 'rgba(255,120,190,.85)' }],
+  getSelf: () => player.position, getSelfYaw: () => playerState.yaw,
+  getSelfColor: () => playerRig.chest.material.emissive.getHex(),
+  getPeers: () => campNet.peers,
+  isHidden: () => bulmong,
+  /* phones: below the brand; elsewhere: clear of the open site menu */
+  layout: { left: 10, top: 126, top2: (w, h) => (w < 700 && h > 500 ? 84 : 126), size: 160, hudHalf: 92 }
+});
+
 function onResize(){
   const w = innerWidth, h = innerHeight;
   camera.aspect = w / h;
@@ -1637,6 +1663,7 @@ function tick(now){
 
   mole.update(dt);
   portal.update(dt, elapsed);
+  minimap.update();
   rimLight.intensity = 2.5 + flicker * 2;
   renderer.toneMappingExposure = 1.0 + flicker * 0.06;
   composer.render();
