@@ -1190,6 +1190,40 @@ const camPos = new THREE.Vector3(player.position.x, 3.4, player.position.z + 7);
 camera.position.copy(camPos);
 const smoothTarget = new THREE.Vector3(0, 1.4, 0);
 
+/* ---------------- portal → AFTERHOURS (src/core/portal.js) ---------------- */
+import { createPortal } from '../core/portal.js';
+const CLUB_URL = './index.html?from=camp'; /* gh-pages root: index.html + camp.html */
+const portal = createPortal({
+  THREE, scene, position: { x: 0, z: -7.6 }, rotationY: 0, /* forest edge behind the fire, faces camp */
+  label: 'AFTERHOURS', color: [0xff2e88, 0x00e5ff], frame: 'log',
+  targetUrl: CLUB_URL, getPlayerPos: () => player.position, radius: 1.2,
+  canEnter: () => playerState.pose === 'idle' && !bulmong,
+  obstacles, arriveFrom: 'club', arriveDist: 2.6,
+  carry: { prefixFrom: 'embers', prefixTo: 'afterhours', get: () => nick.ME },
+  onBeforeLeave: () => {
+    const ws = campNet.NET.ws;
+    if (ws && ws.readyState === 1){
+      try { ws.send(JSON.stringify({ t: 'bye' })); ws.close(1000); } catch (e) {}
+    }
+    campAudio.dispose(); /* same cleanup beforeunload does */
+  }
+});
+if (portal.arrival){
+  const a = portal.arrival;
+  player.position.set(a.x, 0, a.z);
+  playerState.yaw = a.yaw;
+  look.yaw = a.lookYaw;
+  camera.position.set(a.x + Math.sin(a.lookYaw) * 6, 3.4, a.z + Math.cos(a.lookYaw) * 6);
+  smoothTarget.set(a.x, 1.4, a.z);
+  /* keep the carried outfit: the camp server hands out a free colour on join, so ask once for ours */
+  const keepColor = nick.ME.color, applyYou = campNet._applyYou;
+  campNet._applyYou = (name, color) => {
+    campNet._applyYou = applyYou;
+    if (color !== keepColor && campNet.sendProfile(nick.ME.name || name, keepColor)) return;
+    applyYou(name, color);
+  };
+}
+
 function onResize(){
   const w = innerWidth, h = innerHeight;
   camera.aspect = w / h;
@@ -1602,6 +1636,7 @@ function tick(now){
   }
 
   mole.update(dt);
+  portal.update(dt, elapsed);
   rimLight.intensity = 2.5 + flicker * 2;
   renderer.toneMappingExposure = 1.0 + flicker * 0.06;
   composer.render();

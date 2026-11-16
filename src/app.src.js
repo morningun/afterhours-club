@@ -1068,6 +1068,33 @@ const camPos = new THREE.Vector3(player.position.x, 3.4, player.position.z + 6.5
 camera.position.copy(camPos);
 const smoothTarget = new THREE.Vector3(0, 1.6, 0);
 
+/* ---------------- portal → EMBERS (src/core/portal.js) ---------------- */
+import { createPortal } from './core/portal.js';
+const CAMP_URL = './camp.html?from=club'; /* gh-pages root: index.html + camp.html */
+const portal = createPortal({
+  THREE, scene, position: { x: 16.9, z: -3.5 }, rotationY: -Math.PI / 2, /* right wall, faces the room */
+  label: 'EMBERS', color: [0xff7a28, 0xffc04a], frame: 'glow', frameColor: 0xff8a3a,
+  targetUrl: CAMP_URL, getPlayerPos: () => player.position, radius: 1.2,
+  canEnter: () => playerState.pose !== 'dance',
+  obstacles, arriveFrom: 'camp', arriveDist: 2.8,
+  carry: { prefixFrom: 'afterhours', prefixTo: 'embers', get: () => ME },
+  onBeforeLeave: () => {
+    if (NET.ws && NET.ws.readyState === 1){
+      try { NET.ws.send(JSON.stringify({ t: 'bye' })); NET.ws.close(1000); } catch (e) {}
+    }
+    if (audio.ctx && audio.ctx.state === 'running') audio.ctx.suspend();
+  },
+  onReturn: () => { if (audio.ctx && audio.on) audio.ctx.resume(); }
+});
+if (portal.arrival){
+  const a = portal.arrival;
+  player.position.set(a.x, 0, a.z);
+  playerState.yaw = a.yaw;
+  look.yaw = a.lookYaw;
+  camera.position.set(a.x + Math.sin(a.lookYaw) * 5.6, 3.4, a.z + Math.cos(a.lookYaw) * 5.6);
+  smoothTarget.set(a.x, 1.6, a.z);
+}
+
 /* ---------------- resize ---------------- */
 function onResize(){
   const w = innerWidth, h = innerHeight;
@@ -1283,6 +1310,7 @@ function tick(){
 
   /* --- other people in the room --- */
   updateNet(dt, elapsed, beat);
+  portal.update(dt, elapsed);
 
   /* --- DJ --- */
   djFigure.rotation.y = Math.sin(elapsed * 0.7) * 0.22;
