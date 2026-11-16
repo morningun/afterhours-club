@@ -104,6 +104,7 @@ export function createCampAudio(opts = {}) {
   let brownNoise = null;
   let whiteNoise = null;
   let windNoise = null;
+  let popGain = null; /* minigame SFX bus — separate from fire/bugs/wind mixer */
 
   function emitRunning() {
     if (unlockBtnEl) {
@@ -333,6 +334,31 @@ export function createCampAudio(opts = {}) {
     }
   }
 
+  /* tiny "퐁" for the mole minigame; silent unless unlocked+running and not muted */
+  function playPop() {
+    if (disposed || !ctx || !masterGain || !running || ctx.state !== 'running' || prefs.muted) return;
+    try {
+      if (!popGain) {
+        popGain = ctx.createGain();
+        popGain.gain.value = 0.22;
+        popGain.connect(masterGain);
+      }
+      const t0 = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(620, t0);
+      osc.frequency.exponentialRampToValueAtTime(190, t0 + 0.09);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.6, t0 + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+      osc.connect(g);
+      g.connect(popGain);
+      osc.start(t0);
+      osc.stop(t0 + 0.14);
+    } catch (e) { /* ignore */ }
+  }
+
   function setFireLevel(v) {
     fireLevel = clamp01(v);
     const now = performance.now();
@@ -391,7 +417,7 @@ export function createCampAudio(opts = {}) {
     } catch (e) { /* ignore */ }
     try { if (ctx && ctx.state !== 'closed') ctx.close(); } catch (e) { /* ignore */ }
     ctx = null;
-    masterGain = fireGain = fireLevelGain = bugsGain = windGain = null;
+    masterGain = fireGain = fireLevelGain = bugsGain = windGain = popGain = null;
     fireSrc = fireWhite = fireBP = fireLP = windSrc = windLP = windDynGain = null;
     running = false;
     emitRunning();
@@ -478,6 +504,7 @@ export function createCampAudio(opts = {}) {
     unlock,
     isRunning: () => running,
     setFireLevel,
+    playPop,
     setChannel,
     setMuted,
     getPrefs,

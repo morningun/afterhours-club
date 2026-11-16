@@ -1154,6 +1154,24 @@ const stick = document.getElementById('stick');
 const knob = document.getElementById('knob');
 const moveVec = createJoystick(stick, knob);
 
+/* ---------------- 두더지 잡기 (local minigame, src/worlds/camp-mole.js) ---------------- */
+import { createMoleGame } from './camp-mole.js';
+const mole = createMoleGame({
+  THREE, scene, camera, canvas: canvasEl, showToast,
+  isBulmong: () => bulmong,
+  standUp: () => {
+    if (bulmong) setBulmong(false);
+    if (playerState.pose === 'sit' || playerState.pose === 'roast') setSit(false);
+  },
+  faceToward: (x, z) => {
+    const dx = x - player.position.x, dz = z - player.position.z;
+    look.yaw = Math.atan2(-dx, -dz);     /* camera sits behind player, looking at the field */
+    playerState.yaw = Math.atan2(dx, dz);
+  },
+  getPlayer: () => player.position,
+  playPop: () => campAudio.playPop()
+});
+
 /* ---------------- collision ---------------- */
 const obstacles = [
   { x: -7.5, z: 4.5, w: 2.6, d: 2.2 },
@@ -1583,6 +1601,7 @@ function tick(now){
     }
   }
 
+  mole.update(dt);
   rimLight.intensity = 2.5 + flicker * 2;
   renderer.toneMappingExposure = 1.0 + flicker * 0.06;
   composer.render();

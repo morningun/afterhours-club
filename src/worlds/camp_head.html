@@ -208,6 +208,27 @@
   #peerMenu button{min-height:40px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);
     background:rgba(255,255,255,.06);color:#eee;font:600 12px/1 system-ui,sans-serif;cursor:pointer}
 
+  /* 두더지 잡기 HUD — top center, below chips on narrow screens; under open menus/panel */
+  #moleHud{position:fixed;left:50%;top:calc(12px + var(--safe-t));transform:translateX(-50%);
+    z-index:19;display:none;align-items:center;gap:8px;pointer-events:none;white-space:nowrap}
+  #moleHud.show{display:flex}
+  #moleHud.bm{display:none}
+  #moleText{padding:8px 14px;border-radius:999px;background:rgba(20,14,10,.72);
+    border:1px solid rgba(255,154,74,.45);color:#ffe2c4;font:700 14px/1.2 system-ui,sans-serif;pointer-events:none}
+  #moleHud button{min-width:44px;min-height:44px;padding:10px 12px;border-radius:999px;
+    border:1px solid var(--chip-b);background:var(--chip);color:#f0e6d8;pointer-events:auto;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font:700 11px/1 system-ui,sans-serif;cursor:pointer}
+  #moleHud button:active{background:rgba(255,154,74,.2)}
+  #moleRetry{display:none}
+  #moleHud.retry #moleText, #moleHud.retry #moleStop{display:none}
+  #moleHud.retry #moleRetry{display:inline-flex;align-items:center}
+  @media (max-width:699px){
+    /* below brand; stays above the central 60% band (20vh) */
+    #moleHud{top:calc(clamp(82px, 20vh - 46px, 122px) + var(--safe-t));gap:6px}
+    #moleText{font-size:12px;padding:6px 10px}
+    #moleHud button{padding:8px 10px;font-size:10px}
+  }
+
   /* landscape compact */
   @media (orientation:landscape) and (max-height:480px){
     #rightDock{display:flex;flex-direction:row-reverse;flex-wrap:wrap;max-width:52vw;
@@ -219,6 +240,7 @@
     #emoteBar{bottom:auto;top:0}
     #actionWrap{bottom:calc(8px + var(--safe-b))}
     #fireActions{flex-direction:row}
+    #moleHud{top:calc(10px + var(--safe-t))}
   }
 </style>
 </head>
@@ -265,8 +287,10 @@
       <button id="addLog" type="button">🪵 장작</button>
       <button id="wishBtn" type="button">✨ 소원</button>
       <button id="roastBtn" type="button">🍡 마시멜로</button>
+      <button id="moleBtn" type="button">🔨 두더지</button>
     </div>
   </div>
+  <div id="moleHud"><span id="moleText"></span><button id="moleStop" type="button">그만하기</button><button id="moleRetry" type="button">다시하기</button></div>
 </div>
 
 <div id="wishBox"><input id="wishInput" type="text" maxlength="40" autocomplete="off" spellcheck="false" placeholder="소원 한 줄 (최대 40자)" /></div>
